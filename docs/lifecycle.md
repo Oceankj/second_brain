@@ -1,0 +1,177 @@
+# Personal Agent Memory Lifecycle
+
+這份文件描述 Personal Agent Memory MCP 自己負責的生命週期。核心邊界是：本系統不負責 reasoning、不負責完整 agent loop、不負責一般工具決策；它只負責根據輸入吐出相關 durable memory，並在 interaction 結束後接收資料進行保存與整理。
+
+## System Boundary
+
+```mermaid
+flowchart LR
+  caller["User or outer agent runtime"] --> memoryMcp["Personal Agent Memory MCP"]
+  memoryMcp --> durableContext["Related durable memory context"]
+  durableContext --> caller
+
+  caller -. "Reasoning, answer generation, tool decisions happen outside this system" .-> outside["Outer runtime boundary"]
+```
+
+## Durable Context Lookup Lifecycle
+
+```mermaid
+flowchart TD
+  request["get_context(input, user_id, session_id?)"] --> validate["Validate request"]
+  validate --> recentDiary["Load recent diary entries from last 1-2 days"]
+  recentDiary --> diaryRelevant{"Diary relevant to input?"}
+  diaryRelevant -- "Yes" --> mergeDiary["Merge input with relevant diary context"]
+  diaryRelevant -- "No" --> baseContext["Use original input as retrieval context"]
+
+  mergeDiary --> tagHints["Find related tags as retrieval signals"]
+  baseContext --> tagHints
+  tagHints --> embedQuery["Create retrieval query embedding"]
+  tagHints --> tagCandidates["Load memory_items through matching tags"]
+
+  embedQuery --> searchChunks["Search memory_chunks with pgvector"]
+  searchChunks --> joinItems["Join matching memory_items"]
+  joinItems --> seedSet["Build initial candidate set"]
+  tagCandidates --> seedSet
+  seedSet --> linkPolicy["Apply typed link expansion and ranking policy"]
+  linkPolicy --> filterItems["Deduplicate and filter by type, status, user scope, and limit"]
+  filterItems --> logRetrieval["Insert retrieved events"]
+  logRetrieval --> includeLinks{"include_links?"}
+
+  includeLinks -- "Yes" --> loadLinks["Include selected outgoing links and backlinks"]
+  includeLinks -- "No" --> compact["Build compact context bundle"]
+  loadLinks --> compact
+
+  compact --> response["Return related durable memory"]
+```
+
+Notes:
+
+- Tags are not attached during normal durable context lookup.
+- Tags are still important retrieval references: matched tags can add candidate memory items or boost ranking, but they do not need to be returned.
+- Recent diary entries are checked before RAG because they carry short-term life/work context that semantic search may miss.
+- If recent diary is relevant, it becomes part of the retrieval context before semantic search.
+- Typed links affect expansion and ranking differently depending on `link_type`.
+- `get_context` should return relevant memory, not perform reasoning over that memory.
+
+## Ingestion Lifecycle
+
+```mermaid
+flowchart TD
+  ingest["ingest_turn(user_input, assistant_output, metadata)"] --> source["Build memory source"]
+  source --> extract["Extract candidate memories"]
+  extract --> normalizeTags["Normalize candidate tags"]
+
+  normalizeTags --> noteCandidate["Create candidate memory_items"]
+  noteCandidate --> chunk["Chunk memory item body"]
+  chunk --> embed["Generate embeddings"]
+  embed --> saveChunks["Insert memory_chunks"]
+
+  normalizeTags --> findTags["Find or create tags"]
+  findTags --> itemTags["Insert memory_item_tags"]
+
+  noteCandidate --> detectLinks["Detect wikilinks or suggested references"]
+  detectLinks --> saveLinks["Insert memory_links"]
+
+  extract --> stableProfile{"Stable profile signal?"}
+  stableProfile -- "Yes" --> updateProfile["Create or update profile_memory"]
+  stableProfile -- "No" --> skipProfile["Keep as note or diary material"]
+
+  source --> enqueueDiary["Enqueue diary material"]
+
+  saveChunks --> done["Turn ingestion complete"]
+  itemTags --> done
+  saveLinks --> done
+  saveLinks --> logWriteEvents["Insert created, linked, or diary mention events"]
+  logWriteEvents --> done
+  updateProfile --> done
+  skipProfile --> done
+  enqueueDiary --> done
+```
+
+## Daily Maintenance Lifecycle
+
+```mermaid
+flowchart TD
+  trigger{"Daily task trigger"}
+  trigger --> endOfDay["End of day"]
+  trigger --> appClose["Before app close"]
+  trigger --> appInit["App init finds missing summary"]
+
+  endOfDay --> collect["Collect today's interactions and candidate notes"]
+  appClose --> collect
+  appInit --> collect
+
+  collect --> updateNotes["Update notes"]
+  updateNotes --> findSimilar["Find similar notes by tags, links, embedding, title, body"]
+  findSimilar --> mergeOrSplit{"Merge or split needed?"}
+  mergeOrSplit -- "Merge" --> merge["Merge notes and preserve provenance"]
+  mergeOrSplit -- "Split" --> split["Split oversized notes into focused notes"]
+  mergeOrSplit -- "No" --> keep["Keep candidate shape"]
+
+  merge --> repairLinks["Repair and update two-way links"]
+  split --> repairLinks
+  keep --> repairLinks
+
+  repairLinks --> normalize["Normalize tags"]
+  normalize --> diary["Create daily diary entry"]
+  diary --> diaryLinks["Link diary to important notes"]
+  diaryLinks --> activate["Mark reviewed candidates as active"]
+  activate --> archive["Archive stale or superseded items when appropriate"]
+  archive --> done["Daily maintenance complete"]
+```
+
+## Memory Item Status
+
+```mermaid
+stateDiagram-v2
+  [*] --> candidate: ingest_turn creates item
+  candidate --> active: review or daily consolidation
+  candidate --> archived: stale, duplicate, or superseded
+  active --> archived: superseded by merge or no longer useful
+  archived --> active: manual restore
+```
+
+## Retrieval Shape
+
+```mermaid
+sequenceDiagram
+  participant Caller as User or outer runtime
+  participant MCP as Memory MCP
+  participant DB as PostgreSQL + pgvector
+
+  Caller->>MCP: get_context(input, user_id, session_id?)
+  MCP->>DB: load recent diary entries by event_date
+  DB-->>MCP: recent diary candidates
+  MCP->>MCP: check diary relevance and merge context if useful
+  MCP->>DB: find matching tags and tagged memory_items
+  MCP->>DB: vector search memory_chunks using merged retrieval context
+  DB-->>MCP: tagged candidates and matching chunks
+  MCP->>DB: join matching memory_items
+  MCP->>DB: load typed links for candidate expansion
+  MCP->>MCP: rank, merge, and deduplicate results
+  MCP->>DB: insert retrieved memory_item_events
+  MCP->>DB: optionally load outgoing links and backlinks
+  MCP-->>Caller: related durable memory context
+```
+
+## Write Shape
+
+```mermaid
+sequenceDiagram
+  participant Caller as User or outer runtime
+  participant MCP as Memory MCP
+  participant DB as PostgreSQL + pgvector
+
+  Caller->>MCP: ingest_turn(user_input, assistant_output, metadata)
+  MCP->>MCP: extract candidate memories
+  MCP->>MCP: normalize tags
+  MCP->>DB: insert memory_items(status=candidate)
+  MCP->>MCP: chunk body and generate embeddings
+  MCP->>DB: insert memory_chunks
+  MCP->>DB: find or create tags
+  MCP->>DB: insert memory_item_tags
+  MCP->>MCP: detect wikilinks or suggested references
+  MCP->>DB: insert memory_links
+  MCP->>DB: insert memory_item_events
+  MCP-->>Caller: accepted ingestion summary
+```

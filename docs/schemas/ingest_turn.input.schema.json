@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:personal-agent-memory:schema:ingest_turn:input",
+  "title": "ingest_turn input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["user_input", "assistant_output", "metadata"],
+  "properties": {
+    "user_input": {
+      "type": "string",
+      "minLength": 1
+    },
+    "assistant_output": {
+      "type": "string",
+      "minLength": 1
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["timestamp", "source"],
+      "properties": {
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "description": "資料來源，例如 codex、dify、claude-desktop。"
+        },
+        "app": {
+          "type": "string"
+        },
+        "user_id": {
+          "type": "string"
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "conversation_id": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

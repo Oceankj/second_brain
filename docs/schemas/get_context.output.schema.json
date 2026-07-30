@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:personal-agent-memory:schema:get_context:output",
+  "title": "get_context output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["compact_context", "items", "generated_at"],
+  "properties": {
+    "compact_context": {
+      "type": "string",
+      "description": "精簡、可引用、可追溯的相關 durable memory context；不是 reasoning result。"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/context_memory_item"
+      }
+    },
+    "searched_types": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/memory_item_type"
+      }
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "$defs": {
+    "memory_item_type": {
+      "type": "string",
+      "enum": ["note", "diary", "profile_memory"]
+    },
+    "memory_item_status": {
+      "type": "string",
+      "enum": ["candidate", "active", "archived"]
+    },
+    "memory_link_type": {
+      "type": "string",
+      "enum": ["references", "expands", "derived_from", "same_topic", "contradicts", "supersedes"]
+    },
+    "memory_chunk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "memory_item_id", "chunk_index", "content"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "memory_item_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "chunk_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "content": {
+          "type": "string"
+        },
+        "token_count": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "score": {
+          "type": ["number", "null"]
+        }
+      }
+    },
+    "memory_link": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "source_id", "target_id", "link_type", "created_at"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "source_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "target_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "link_type": {
+          "$ref": "#/$defs/memory_link_type"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "context_memory_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "title", "body", "status", "created_at", "updated_at"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "type": {
+          "$ref": "#/$defs/memory_item_type"
+        },
+        "title": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/memory_item_status"
+        },
+        "event_date": {
+          "type": ["string", "null"],
+          "format": "date"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "score": {
+          "type": "number"
+        },
+        "matched_chunks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/memory_chunk"
+          }
+        },
+        "outgoing_links": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/memory_link"
+          }
+        },
+        "backlinks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/memory_link"
+          }
+        }
+      }
+    }
+  }
+}

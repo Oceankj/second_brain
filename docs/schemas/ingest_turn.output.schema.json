@@ -1,0 +1,201 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:personal-agent-memory:schema:ingest_turn:output",
+  "title": "ingest_turn output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "candidate_items", "diary_material_enqueued"],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["accepted"]
+    },
+    "candidate_items": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/memory_item"
+      }
+    },
+    "profile_memory_updates": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/memory_item"
+      }
+    },
+    "diary_material_enqueued": {
+      "type": "boolean"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/tag"
+      }
+    },
+    "links": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/memory_link"
+      }
+    },
+    "events": {
+      "type": "array",
+      "description": "memory_item_events created during ingestion.",
+      "items": {
+        "$ref": "#/$defs/memory_item_event"
+      }
+    }
+  },
+  "$defs": {
+    "memory_item_type": {
+      "type": "string",
+      "enum": ["note", "diary", "profile_memory"]
+    },
+    "memory_item_status": {
+      "type": "string",
+      "enum": ["candidate", "active", "archived"]
+    },
+    "memory_link_type": {
+      "type": "string",
+      "enum": ["references", "expands", "derived_from", "same_topic", "contradicts", "supersedes"]
+    },
+    "memory_item_event_type": {
+      "type": "string",
+      "enum": [
+        "created",
+        "retrieved",
+        "shown",
+        "used_in_answer",
+        "linked_from_new_note",
+        "mentioned_in_diary",
+        "manually_pinned",
+        "manually_demoted",
+        "archived",
+        "restored"
+      ]
+    },
+    "memory_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "title", "body", "status", "created_at", "updated_at"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "type": {
+          "$ref": "#/$defs/memory_item_type"
+        },
+        "title": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/memory_item_status"
+        },
+        "event_date": {
+          "type": ["string", "null"],
+          "format": "date"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/tag"
+          }
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "tag": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "created_at", "updated_at"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": ["string", "null"]
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "memory_link": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "source_id", "target_id", "link_type", "created_at"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "source_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "target_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "link_type": {
+          "$ref": "#/$defs/memory_link_type"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "memory_item_event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "memory_item_id", "event_type", "occurred_at"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "memory_item_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_type": {
+          "$ref": "#/$defs/memory_item_event_type"
+        },
+        "source": {
+          "type": ["string", "null"]
+        },
+        "session_id": {
+          "type": ["string", "null"]
+        },
+        "metadata": {
+          "type": ["object", "null"],
+          "additionalProperties": true
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}
