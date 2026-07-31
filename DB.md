@@ -1,12 +1,12 @@
 # Database Schema
 
-This document records the first-pass database design for the personal agent memory system.
+這份文件記錄 personal agent memory system 的第一版資料庫設計。
 
-The system should use PostgreSQL with `pgvector`, because the data model needs relational structure, graph-like links, tag normalization, full-text search, and semantic search in the same database.
+系統應該使用 PostgreSQL 搭配 `pgvector`。原因是這個系統同時需要 relational structure、graph-like links、tag normalization、full-text search 與 semantic search。
 
 ## P0 Tables
 
-P0 focuses on six tables:
+P0 目前聚焦在六張 tables：
 
 - `memory_items`
 - `memory_chunks`
@@ -17,11 +17,11 @@ P0 focuses on six tables:
 
 ## memory_items
 
-Stores the top-level memory objects.
+儲存最上層的 memory objects。
 
-Diary entries, normal notes, and profile memories should share this table. They are the same core object shape: durable text with identity, status, timestamps, links, tags, and chunks.
+Diary entries、一般 notes、profile memories 應該共用這張 table。它們本質上都是有 identity、status、timestamps、links、tags 與 chunks 的 durable text。
 
-Use `type` instead of `is_diary` so the model can grow beyond a binary note/diary split.
+使用 `type`，不要使用 `is_diary`。這樣未來可以自然擴充，不會被二元的 note/diary 分類綁住。
 
 ```sql
 create type memory_item_type as enum (
@@ -48,20 +48,20 @@ create table memory_items (
 );
 ```
 
-### Field Notes
+### 欄位說明
 
-- `type`: distinguishes `note`, `diary`, and `profile_memory`.
-- `status`: starts as `candidate`; becomes `active` after review or daily consolidation.
-- `event_date`: mainly used by diary entries. Normal notes and profile memories can leave it null.
-- `body`: stores the canonical full text of the item.
+- `type`: 區分 `note`、`diary`、`profile_memory`。
+- `status`: 一開始是 `candidate`；經過 review 或 daily consolidation 後變成 `active`。
+- `event_date`: 主要給 diary entries 使用。一般 notes 與 profile memories 可以是 null。
+- `body`: 儲存這個 memory item 的 canonical full text。
 
-Do not add `summary` or `metadata` in P0. They can be added later when there is a concrete retrieval or provenance need.
+P0 先不要加入 `summary` 或 `metadata`。等 retrieval 或 provenance 真的有具體需求時再補。
 
 ## memory_chunks
 
-Stores searchable chunks derived from `memory_items`.
+儲存從 `memory_items` 產生出來、可被搜尋的 chunks。
 
-Embeddings should live on chunks, not directly on `memory_items`, because long notes and diary entries may need multiple embeddings.
+Embeddings 應該放在 chunks 上，而不是直接放在 `memory_items` 上。原因是長 notes 與 diary entries 可能需要多個 embeddings。
 
 ```sql
 create table memory_chunks (
@@ -77,20 +77,20 @@ create table memory_chunks (
 );
 ```
 
-### Field Notes
+### 欄位說明
 
-- `chunk_index`: preserves chunk order inside the parent memory item.
-- `content`: the exact text embedded for semantic search.
-- `embedding`: pgvector embedding for retrieval.
-- `token_count`: useful for budgeting and future re-chunking, but can be null if not calculated yet.
+- `chunk_index`: 保留 chunk 在 parent memory item 裡的順序。
+- `content`: 實際被拿去 embedding 與 semantic search 的文字。
+- `embedding`: pgvector embedding，用於 retrieval。
+- `token_count`: 用於 token budgeting 與未來 re-chunking。如果尚未計算，可以是 null。
 
-The vector dimension should match the embedding model. `1536` is a placeholder and should be changed if the selected embedding model uses a different dimension.
+Vector dimension 應該要跟選定的 embedding model 一致。`1536` 只是 placeholder；如果 embedding model 使用不同 dimension，需要調整。
 
 ## memory_links
 
-Stores directed links between memory items.
+儲存 memory items 之間的 directed links。
 
-Two-way links do not need two rows. Store one directed edge, then query backlinks by filtering `target_id`.
+Two-way links 不需要真的存兩筆。存一條 directed edge，backlinks 用 `target_id` 反查即可。
 
 ```sql
 create type memory_link_type as enum (
@@ -113,28 +113,28 @@ create table memory_links (
 );
 ```
 
-### Field Notes
+### 欄位說明
 
-- `source_id`: the note, diary entry, or profile memory that contains the reference.
-- `target_id`: the linked memory item.
-- `link_type`: describes how retrieval and maintenance should use the edge.
+- `source_id`: 包含 reference 的 note、diary entry 或 profile memory。
+- `target_id`: 被連到的 memory item。
+- `link_type`: 描述 retrieval 與 maintenance 應該如何使用這條 edge。
 
-Do not add `anchor_text` or `context` in P0. Those are useful later for precise hover previews, highlighted link positions, and explaining why a link exists.
+P0 先不要加 `anchor_text` 或 `context`。它們之後可以用於精準 hover preview、highlight link 位置，以及解釋為什麼有這條 link。
 
-### Link Type Usage
+### Link Type 用法
 
-- `references`: source directly mentions or depends on target. Use for light retrieval expansion and visible backlinks.
-- `expands`: target adds detail to source. Use when the seed item is relevant and the caller may need deeper context.
-- `derived_from`: source was created from target. Use for provenance and lower-priority expansion back to evidence.
-- `same_topic`: items discuss the same area. Use as a ranking boost and maintenance merge signal, but avoid blindly returning every neighbor.
-- `contradicts`: items disagree or supersede each other's claims. Use to surface conflict only when one side is already relevant.
-- `supersedes`: source replaces target. Prefer the superseding item during retrieval; keep target mostly for provenance/backlinks.
+- `references`: source 直接提到或依賴 target。用於輕量 retrieval expansion 與可見 backlinks。
+- `expands`: target 補充 source 的細節。當 seed item relevant 且 caller 可能需要更深 context 時使用。
+- `derived_from`: source 是從 target 產生的。用於 provenance，以及低優先度地回溯 evidence。
+- `same_topic`: items 討論相同領域。用作 ranking boost 與 maintenance merge signal，但不要盲目回傳所有 neighbors。
+- `contradicts`: items 彼此有衝突或不同說法。只有當其中一邊已經 relevant 時才 surface conflict。
+- `supersedes`: source 取代 target。Retrieval 時優先使用 superseding item，target 主要保留給 provenance/backlinks。
 
 ## tags
 
-Stores normalized tags.
+儲存 normalized tags。
 
-Tags are separate from links. Tags provide broad classification; links express concrete relationships between memory items.
+Tags 和 links 分工不同。Tags 提供廣義分類；links 表達 memory items 之間的具體關係。
 
 ```sql
 create table tags (
@@ -146,16 +146,16 @@ create table tags (
 );
 ```
 
-### Field Notes
+### 欄位說明
 
-- `name`: canonical tag name.
-- `description`: defines the tag boundary. This can be generated by an LLM and edited later.
+- `name`: canonical tag name。
+- `description`: 定義這個 tag 的使用邊界。可以由 LLM 產生，之後再人工調整。
 
-Do not add aliases in P0. If alias handling becomes necessary, add a separate `tag_aliases` table instead of storing aliases in a `text[]` column.
+P0 不加 aliases。如果未來真的需要 alias handling，應該新增獨立的 `tag_aliases` table，而不是把 aliases 存成 `text[]`。
 
 ## memory_item_tags
 
-Join table between memory items and tags.
+Memory items 與 tags 的 join table。
 
 ```sql
 create table memory_item_tags (
@@ -168,9 +168,9 @@ create table memory_item_tags (
 
 ## memory_item_events
 
-Stores usage and lifecycle events for memory items.
+儲存 memory items 的 usage 與 lifecycle events。
 
-This is the raw fact table for future hot/cold ranking. P0 should capture events, but it does not need to decide the final heat algorithm yet. Future ranking tables can be recalculated from this log.
+這是未來 hot/cold ranking 的 raw fact table。P0 應該先捕捉 events，但不需要決定最終 heat algorithm。未來 ranking tables 可以從這份 event log 重新計算。
 
 ```sql
 create type memory_item_event_type as enum (
@@ -197,49 +197,49 @@ create table memory_item_events (
 );
 ```
 
-### Field Notes
+### 欄位說明
 
-- `event_type`: what happened to this memory item.
-- `source`: source app or runtime, such as `codex`, `dify`, or `claude-desktop`.
-- `session_id`: optional conversation/session id for grouping events.
-- `metadata`: flexible event details, such as retrieval score, rank, query hash, link id, or manual reason.
+- `event_type`: 這個 memory item 發生了什麼事。
+- `source`: 來源 app 或 runtime，例如 `codex`、`dify`、`claude-desktop`。
+- `session_id`: optional conversation/session id，用於 grouping events。
+- `metadata`: 彈性事件細節，例如 retrieval score、rank、query hash、link id 或 manual reason。
 
-Do not add `heat_score` or `importance_score` in P0. Those are derived ranking values and should be computed later from event history.
+P0 不加 `heat_score` 或 `importance_score`。它們是 derived ranking values，之後應該從 event history 計算。
 
 ## P0 Retrieval Shape
 
-Typical context retrieval should:
+典型 context retrieval 流程：
 
-1. Load recent `diary` items by `event_date`, usually the last 1-2 days.
-2. Check whether those diary entries are relevant to the current input.
-3. If relevant, merge diary context into the retrieval context.
-4. Find matching tags and load tagged memory items as retrieval candidates or ranking signals.
-5. Search `memory_chunks` with pgvector using the merged retrieval context.
-6. Join semantic matches back to `memory_items`.
-7. Expand or rerank candidates according to typed `memory_links`.
-8. Merge candidates, deduplicate, and apply type/status/user scope/limit.
-9. Optionally include selected outgoing links and backlinks from `memory_links`.
-10. Insert `retrieved` events for returned memory items.
-11. Return related durable memory context to the caller.
+1. 根據 `event_date` 載入近期 `diary` items，通常是最近 1-2 天。
+2. 判斷這些 diary entries 是否與當前 input relevant。
+3. 如果 relevant，把 diary context merge 進 retrieval context。
+4. 找 matching tags，並把 tagged memory items 作為 retrieval candidates 或 ranking signals。
+5. 使用合併後的 retrieval context，透過 pgvector 搜尋 `memory_chunks`。
+6. 將 semantic matches join 回 `memory_items`。
+7. 根據 typed `memory_links` expansion 或 rerank candidates。
+8. Merge candidates、deduplicate，並套用 type/status/user scope/limit。
+9. 視需要加入精選 outgoing links 與 backlinks。
+10. 對回傳的 memory items 寫入 `retrieved` events。
+11. 回傳 durable memory context 給 caller。
 
-Tags are useful retrieval references, but normal context retrieval does not need to attach tags to the returned context.
+Tags 是有用的 retrieval references，但一般 context retrieval 不一定要把 tags 附在最終回傳內容中。
 
 ## P0 Write Shape
 
-Typical memory ingestion should:
+典型 memory ingestion 流程：
 
-1. Create a `memory_items` row with `status = 'candidate'`.
-2. Chunk the body into `memory_chunks`.
-3. Generate embeddings for each chunk.
-4. Find or create normalized tags.
-5. Insert `memory_item_tags`.
-6. Detect explicit `[[wikilinks]]` or model-suggested references.
-7. Insert `memory_links`.
-8. Insert `created`, `linked_from_new_note`, or `mentioned_in_diary` events where applicable.
+1. 建立 `memory_items` row，並設 `status = 'candidate'`。
+2. 將 `body` 切成 `memory_chunks`。
+3. 替每個 chunk 產生 embeddings。
+4. 找到或建立 normalized tags。
+5. 寫入 `memory_item_tags`。
+6. 偵測明確的 `[[wikilinks]]` 或 model-suggested references。
+7. 寫入 `memory_links`。
+8. 視情況寫入 `created`、`linked_from_new_note` 或 `mentioned_in_diary` events。
 
 ## Indexes
 
-P0 should include indexes for common retrieval paths.
+P0 應該包含常見 retrieval paths 需要的 indexes。
 
 ```sql
 create index memory_items_type_idx on memory_items(type);
@@ -255,9 +255,9 @@ create index memory_item_events_type_idx on memory_item_events(event_type);
 create index memory_item_events_occurred_at_idx on memory_item_events(occurred_at);
 ```
 
-Add the pgvector index after choosing the embedding model and distance metric.
+選定 embedding model 與 distance metric 後，再加入 pgvector index。
 
-Example:
+範例：
 
 ```sql
 create index memory_chunks_embedding_idx
