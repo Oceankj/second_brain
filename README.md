@@ -40,6 +40,30 @@ P0 schema 也會記錄 `memory_item_events`。這是 hot/cold memory 的 raw eve
 
 Resources 與 prompts 先作為 MCP-first 設計邊界記錄；是否進入 P0 實作，以工具穩定後再決定。
 
+## FastMCP Skeleton
+
+目前實作骨架採用 Python FastMCP，入口在 `src/personal_agent_memory/server.py`。
+
+先安裝依賴：
+
+```bash
+uv sync --extra dev
+```
+
+建立 P0 database schema：
+
+```bash
+psql "$DATABASE_URL" -f migrations/001_p0_schema.sql
+```
+
+啟動 stdio MCP server：
+
+```bash
+DATABASE_URL="postgresql://localhost:5432/personal_agent_memory" uv run personal-agent-memory
+```
+
+第一版先用 deterministic hash embedding provider，讓 ingestion 與 pgvector retrieval 的 vertical slice 可以本機跑通。之後接真實 embedding model 時，替換 `src/personal_agent_memory/embeddings.py` 的 provider 即可。
+
 ## Memory Source
 
 Memory source 不是只有 model output，而是整個 interaction：

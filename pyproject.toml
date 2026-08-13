@@ -1,0 +1,36 @@
+[project]
+name = "personal-agent-memory"
+version = "0.1.0"
+description = "Personal durable memory MCP server."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "mcp[cli]>=1.27,<2",
+  "pgvector>=0.3,<1",
+  "psycopg[binary]>=3.2,<4",
+  "pydantic>=2.8,<3",
+]
+
+[project.scripts]
+personal-agent-memory = "personal_agent_memory.server:main"
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8,<9",
+  "ruff>=0.12,<1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

@@ -108,3 +108,20 @@ memory_chunks
 ```
 
 未來如果大型 nested notes、structural diffs、local-first sync 或 version history 真的帶來壓力，再考慮完整 hash tree。
+
+## 可借用與不借用的概念
+
+可以借用 Google Drive / block storage 類產品的概念，但要翻譯成 embedding lifecycle strategy。
+
+適合借用：
+
+- De-duplicate data blocks -> de-duplicate semantic chunks / embeddings。
+- Infrequently used data -> cold memories 可以 lazy re-embed。
+- Valuable data -> hot 或 important memories 可以 eager re-embed。
+
+暫時不適合借用：
+
+- Limit versions。這比較像文件備份或版本保留策略，和 P1 的 re-embedding 判斷關係不大。
+- Keep valuable versions only。除非之後真的要保存 note/chunk 歷史版本，否則 P1 不需要設計 version retention policy。
+
+這裡的 `embedding_version` 不是「保存第幾版 note」的意思，而是記錄 embedding pipeline 的版本，例如 embedding model、dimension、normalization 或產生方式。它的用途是判斷舊 embedding 是否仍可重用，而不是做文件版本管理。
