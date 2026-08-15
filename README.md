@@ -4,6 +4,48 @@
 
 它本身不負責完整的 agent loop，也不負責一般 tool using 的決策；這些應該由 Dify、Codex、Claude Desktop 或其他外層 agent runtime 負責。本專案專注在長期記憶的讀取、寫入、整理與連結。
 
+## Quick Start
+
+目前 quick start 只涵蓋已經實作到的本機開發流程：安裝依賴、啟動 PostgreSQL + pgvector、套 P0 schema、啟動 stdio MCP server。
+
+安裝依賴：
+
+```bash
+uv sync --extra dev
+```
+
+準備本機環境設定：
+
+```bash
+cp .env.example .env
+```
+
+啟動本機 PostgreSQL + pgvector：
+
+```bash
+scripts/db/up.sh
+```
+
+套用 P0 database schema：
+
+```bash
+scripts/db/migrate.sh
+```
+
+啟動 stdio MCP server：
+
+```bash
+uv run personal-agent-memory
+```
+
+預設的 Docker Compose database URL 是：
+
+```text
+postgresql://postgres:postgres@localhost:5433/personal_agent_memory
+```
+
+如果你已經有自己的 Docker PostgreSQL 或其他 local PostgreSQL，這個 Compose service 不是必要的；把 `DATABASE_URL` 指到你的 database，然後用你的 migration 流程套 [migrations/001_p0_schema.sql](migrations/001_p0_schema.sql)。細節見 [scripts/db/README.md](scripts/db/README.md)。
+
 ## Documentation Shape
 
 這個 repo 採用 MCP-first 文件架構。Canonical spec 是 MCP primitives 與 JSON Schema，不是 Swagger/OpenAPI。
@@ -43,24 +85,6 @@ Resources 與 prompts 先作為 MCP-first 設計邊界記錄；是否進入 P0 �
 ## FastMCP Skeleton
 
 目前實作骨架採用 Python FastMCP，入口在 `src/personal_agent_memory/server.py`。
-
-先安裝依賴：
-
-```bash
-uv sync --extra dev
-```
-
-建立 P0 database schema：
-
-```bash
-psql "$DATABASE_URL" -f migrations/001_p0_schema.sql
-```
-
-啟動 stdio MCP server：
-
-```bash
-DATABASE_URL="postgresql://localhost:5432/personal_agent_memory" uv run personal-agent-memory
-```
 
 第一版先用 deterministic hash embedding provider，讓 ingestion 與 pgvector retrieval 的 vertical slice 可以本機跑通。之後接真實 embedding model 時，替換 `src/personal_agent_memory/embeddings.py` 的 provider 即可。
 

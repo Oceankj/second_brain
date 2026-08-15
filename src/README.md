@@ -54,10 +54,16 @@ personal_agent_memory/
   server.py       FastMCP app and tool handlers.
   config.py       Environment-backed runtime settings.
   schemas.py      Pydantic models matching docs/schemas JSON Schema intent.
-  service.py      P0 use cases: ingest_turn and get_context.
+  service.py      Thin facade that composes use-case services.
   repository.py   PostgreSQL/pgvector persistence adapter.
   chunking.py     Text chunking helpers.
   embeddings.py   Embedding provider protocol and placeholder provider.
+  services/
+    ingestion.py   ingest_turn use case.
+    retrieval.py   get_context use case.
+  utils/
+    serialization.py    Response serialization helpers.
+    text_processing.py  Title, tag, body, and wikilink helpers.
 ```
 
 ## Runtime Flow
@@ -66,7 +72,7 @@ personal_agent_memory/
 
 `server.py` receives MCP tool args and builds an `IngestTurnInput`.
 
-`MemoryService.ingest_turn` then:
+`MemoryService` delegates to `IngestionService.ingest_turn`, which then:
 
 1. Builds a durable memory body from user input and assistant output.
 2. Creates a `memory_items` row with `type = note` and `status = candidate`.
@@ -86,7 +92,7 @@ The current extraction strategy is intentionally simple: one interaction becomes
 
 `server.py` receives MCP tool args and builds a `GetContextInput`.
 
-`MemoryService.get_context` then:
+`MemoryService` delegates to `RetrievalService.get_context`, which then:
 
 1. Embeds the caller input.
 2. Searches `memory_chunks` with pgvector cosine distance.
@@ -122,21 +128,70 @@ Avoid:
 
 ### `service.py`
 
-This is the application/use-case layer. It coordinates chunking, embedding, repository calls, serialization, and P0 workflow decisions.
+This is a thin facade. It exists so `server.py` can depend on one object while the actual use cases live in smaller services.
 
 Good responsibilities:
 
-- Implement `ingest_turn` workflow.
-- Implement `get_context` workflow.
-- Normalize tags.
-- Detect simple wikilinks.
-- Build compact context.
+- Compose `IngestionService`.
+- Compose `RetrievalService`.
+- Keep the MCP adapter stable while internal services evolve.
 
 Avoid:
 
 - Raw SQL.
 - FastMCP decorators.
 - Provider-specific API calls.
+- Use-case logic that belongs in a dedicated service.
+
+### `services/ingestion.py`
+
+This owns the `ingest_turn` use case.
+
+Good responsibilities:
+
+- Build candidate note body and title.
+- Create candidate memory item.
+- Create chunks and embeddings.
+- Attach normalized tags.
+- Resolve simple wikilinks.
+- Write `created` events.
+
+Avoid:
+
+- Retrieval ranking.
+- Daily consolidation.
+- Long-term profile stability rules.
+
+### `services/retrieval.py`
+
+This owns the `get_context` use case.
+
+Good responsibilities:
+
+- Embed caller query.
+- Search matching chunks.
+- Deduplicate and rank memory items.
+- Log `retrieved` events.
+- Attach selected links.
+- Build context response.
+
+Avoid:
+
+- Ingestion writes.
+- Memory extraction.
+- Tag normalization writes.
+
+### `utils/serialization.py`
+
+This keeps response shaping out of use-case code. It converts database dictionaries into output-schema-shaped dictionaries.
+
+This is app-specific utility code, not a use-case service. If serialization grows into versioned API presentation logic later, it can move to a dedicated `presenters/` or `mappers/` package.
+
+### `utils/text_processing.py`
+
+This keeps deterministic string handling separate from orchestration code. It currently owns title creation, tag normalization, turn body construction, and wikilink detection.
+
+This is utility code because it has no side effects and no use-case orchestration responsibility.
 
 ### `repository.py`
 
