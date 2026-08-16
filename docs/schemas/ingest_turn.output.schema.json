@@ -56,7 +56,7 @@
     },
     "memory_link_type": {
       "type": "string",
-      "enum": ["references", "expands", "derived_from", "same_topic", "contradicts", "supersedes"]
+      "enum": ["references"]
     },
     "memory_item_event_type": {
       "type": "string",

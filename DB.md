@@ -94,12 +94,7 @@ Two-way links 不需要真的存兩筆。存一條 directed edge，backlinks 用
 
 ```sql
 create type memory_link_type as enum (
-  'references',
-  'expands',
-  'derived_from',
-  'same_topic',
-  'contradicts',
-  'supersedes'
+  'references'
 );
 
 create table memory_links (
@@ -117,18 +112,15 @@ create table memory_links (
 
 - `source_id`: 包含 reference 的 note、diary entry 或 profile memory。
 - `target_id`: 被連到的 memory item。
-- `link_type`: 描述 retrieval 與 maintenance 應該如何使用這條 edge。
+- `link_type`: P0 只支援 `references`，表示 source 直接提到或依賴 target。
 
 P0 先不要加 `anchor_text` 或 `context`。它們之後可以用於精準 hover preview、highlight link 位置，以及解釋為什麼有這條 link。
 
 ### Link Type 用法
 
 - `references`: source 直接提到或依賴 target。用於輕量 retrieval expansion 與可見 backlinks。
-- `expands`: target 補充 source 的細節。當 seed item relevant 且 caller 可能需要更深 context 時使用。
-- `derived_from`: source 是從 target 產生的。用於 provenance，以及低優先度地回溯 evidence。
-- `same_topic`: items 討論相同領域。用作 ranking boost 與 maintenance merge signal，但不要盲目回傳所有 neighbors。
-- `contradicts`: items 彼此有衝突或不同說法。只有當其中一邊已經 relevant 時才 surface conflict。
-- `supersedes`: source 取代 target。Retrieval 時優先使用 superseding item，target 主要保留給 provenance/backlinks。
+
+`expands`、`derived_from`、`same_topic`、`contradicts`、`supersedes` 先留到 P1。等 retrieval policy、maintenance workflow 或 human review 真的需要這些語意時再加入。
 
 ## tags
 

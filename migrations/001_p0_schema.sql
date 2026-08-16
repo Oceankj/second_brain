@@ -26,12 +26,7 @@ end $$;
 do $$
 begin
   create type memory_link_type as enum (
-    'references',
-    'expands',
-    'derived_from',
-    'same_topic',
-    'contradicts',
-    'supersedes'
+    'references'
   );
 exception
   when duplicate_object then null;

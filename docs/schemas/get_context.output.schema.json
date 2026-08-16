@@ -38,7 +38,7 @@
     },
     "memory_link_type": {
       "type": "string",
-      "enum": ["references", "expands", "derived_from", "same_topic", "contradicts", "supersedes"]
+      "enum": ["references"]
     },
     "memory_chunk": {
       "type": "object",

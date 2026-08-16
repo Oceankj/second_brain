@@ -22,8 +22,8 @@ variables are:
 POSTGRES_DB=personal_agent_memory
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=postgres
-POSTGRES_PORT=5433
-DATABASE_URL=postgresql://postgres:postgres@localhost:5433/personal_agent_memory
+POSTGRES_PORT=5432
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/personal_agent_memory
 ```
 
 `DATABASE_URL` is the database used by the MCP server. `POSTGRES_*` variables
@@ -37,7 +37,7 @@ Start PostgreSQL:
 scripts/db/up.sh
 ```
 
-Apply the current SQL migration:
+Apply SQL migrations:
 
 ```bash
 scripts/db/migrate.sh
@@ -59,8 +59,8 @@ scripts/db/down.sh
 
 If you already have a Docker PostgreSQL container or another managed local
 PostgreSQL instance, you do not need this Compose service. Point
-`DATABASE_URL` at your database and apply `migrations/001_p0_schema.sql` with
-your normal migration workflow.
+`DATABASE_URL` at your database and apply `migrations/*.sql` in filename order
+with your normal migration workflow.
 
 If an existing database already has memory tables and the schema differs from
 `DB.md`, stop and decide whether to write a migration. Do not hide that decision

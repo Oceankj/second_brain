@@ -7,14 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 MemoryItemType = Literal["note", "diary", "profile_memory"]
 MemoryItemStatus = Literal["candidate", "active", "archived"]
-MemoryLinkType = Literal[
-    "references",
-    "expands",
-    "derived_from",
-    "same_topic",
-    "contradicts",
-    "supersedes",
-]
+MemoryLinkType = Literal["references"]
 
 
 class GetContextInput(BaseModel):
