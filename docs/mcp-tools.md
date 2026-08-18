@@ -35,7 +35,7 @@ Output schema:
 - 若 recent diary 相關，先把 diary context 併入 retrieval context，再進 semantic retrieval。
 - Semantic retrieval 以 `memory_chunks` 的 pgvector search 為主，再 join 回 `memory_items`。
 - Tags 不在一般 `get_context` output 中 attach；但 tag match 是重要 retrieval signal，可以補候選 items 或提升排名。
-- Typed links 會用於 candidate expansion 與 ranking；不同 `link_type` 有不同使用方式，詳見 [mcp-links.md](mcp-links.md)。
+- P0 links 只支援 `references`，可用於 candidate expansion 與 backlinks，詳見 [mcp-links.md](mcp-links.md)。
 - Recent diary、tag candidates、semantic matches 與 link-expanded candidates 需要合併、去重，再套用 status/user scope/limit。
 - 回傳內容應該是相關 durable memory context，不負責 reasoning 或 answer generation。
 - P0 會記錄 returned memory items 的 `retrieved` events，作為未來 hot/cold ranking 的 raw signals。

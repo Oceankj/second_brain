@@ -7,8 +7,8 @@ from mcp.server.fastmcp import FastMCP
 from personal_agent_memory.config import load_settings
 from personal_agent_memory.embeddings import HashEmbeddingProvider
 from personal_agent_memory.repository import PostgresMemoryRepository
-from personal_agent_memory.schemas import GetContextInput, IngestTurnInput
 from personal_agent_memory.service import MemoryService
+from personal_agent_memory.tool_schemas import GetContextInput, IngestTurnInput
 
 mcp = FastMCP("personal-agent-memory")
 _service: MemoryService | None = None
@@ -28,7 +28,11 @@ def get_service() -> MemoryService:
 
 
 @mcp.tool()
-async def ingest_turn(user_input: str, assistant_output: str, metadata: dict[str, Any]) -> dict[str, Any]:
+async def ingest_turn(
+    user_input: str,
+    assistant_output: str,
+    metadata: dict[str, Any],
+) -> dict[str, Any]:
     """Store one interaction as candidate durable memory."""
 
     payload = IngestTurnInput(

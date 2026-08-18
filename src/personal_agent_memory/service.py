@@ -4,9 +4,9 @@ from typing import Any
 
 from personal_agent_memory.embeddings import EmbeddingProvider
 from personal_agent_memory.repository import PostgresMemoryRepository
-from personal_agent_memory.schemas import GetContextInput, IngestTurnInput
 from personal_agent_memory.services.ingestion import IngestionService
 from personal_agent_memory.services.retrieval import RetrievalService
+from personal_agent_memory.tool_schemas import GetContextInput, IngestTurnInput
 
 
 class MemoryService:

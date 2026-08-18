@@ -50,7 +50,7 @@ Notes:
 - Tags are still important retrieval references: matched tags can add candidate memory items or boost ranking, but they do not need to be returned.
 - Recent diary entries are checked before RAG because they carry short-term life/work context that semantic search may miss.
 - If recent diary is relevant, it becomes part of the retrieval context before semantic search.
-- Typed links affect expansion and ranking differently depending on `link_type`.
+- P0 links only support `references`, which can affect candidate expansion and backlinks.
 - `get_context` should return relevant memory, not perform reasoning over that memory.
 
 ## Ingestion Lifecycle

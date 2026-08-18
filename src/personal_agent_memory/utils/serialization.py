@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from personal_agent_memory.schemas import json_date, json_datetime
+from personal_agent_memory.tool_schemas import json_date, json_datetime
 
 
-def serialize_item(item: dict[str, Any], tags: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+def serialize_item(
+    item: dict[str, Any],
+    tags: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     return {
         "id": item["id"],
         "type": item["type"],

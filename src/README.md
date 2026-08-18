@@ -53,14 +53,14 @@ class EmbeddingProvider(Protocol):
 personal_agent_memory/
   server.py       FastMCP app and tool handlers.
   config.py       Environment-backed runtime settings.
-  schemas.py      Pydantic models matching docs/schemas JSON Schema intent.
+  tool_schemas.py Pydantic models matching docs/schemas JSON Schema intent.
   service.py      Thin facade that composes use-case services.
-  repository.py   PostgreSQL/pgvector persistence adapter.
-  chunking.py     Text chunking helpers.
+  repository/     PostgreSQL/pgvector persistence adapters by table.
   embeddings.py   Embedding provider protocol and placeholder provider.
   services/
     ingestion.py   ingest_turn use case.
     retrieval.py   get_context use case.
+    chunking.py    Text chunking helpers used by ingestion.
   utils/
     serialization.py    Response serialization helpers.
     text_processing.py  Title, tag, body, and wikilink helpers.
@@ -193,9 +193,10 @@ This keeps deterministic string handling separate from orchestration code. It cu
 
 This is utility code because it has no side effects and no use-case orchestration responsibility.
 
-### `repository.py`
+### `repository/`
 
-This is the persistence adapter. It owns SQL and pgvector-specific details.
+This is the persistence adapter package. It owns SQL and pgvector-specific details, with
+table-scoped files behind one `PostgresMemoryRepository` facade.
 
 Good responsibilities:
 

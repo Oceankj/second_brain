@@ -1,4 +1,4 @@
-from personal_agent_memory.chunking import chunk_text
+from personal_agent_memory.services.chunking import chunk_text
 
 
 def test_chunk_text_returns_ordered_chunks_with_overlap() -> None:

@@ -5,7 +5,7 @@ from typing import Any
 
 from personal_agent_memory.embeddings import EmbeddingProvider
 from personal_agent_memory.repository import PostgresMemoryRepository
-from personal_agent_memory.schemas import GetContextInput
+from personal_agent_memory.tool_schemas import GetContextInput
 from personal_agent_memory.utils.serialization import (
     build_compact_context,
     serialize_context_item,
@@ -24,18 +24,26 @@ class RetrievalService:
 
     async def get_context(self, payload: GetContextInput) -> dict[str, Any]:
         query_embedding = await self.embedding_provider.embed_text(payload.input)
-        rows = await self.repository.search_chunks(
+        rows = await self.repository.memory_chunks.search(
             query_embedding=query_embedding,
             memory_types=list(payload.memory_types),
             limit=payload.limit * 3,
         )
 
-        ranked_items = self._rank_chunk_rows(rows, limit=payload.limit, include_chunks=payload.include_chunks)
+        ranked_items = self._rank_chunk_rows(
+            rows,
+            limit=payload.limit,
+            include_chunks=payload.include_chunks,
+        )
         item_ids = [item["id"] for item in ranked_items]
 
         await self._log_retrieval_events(item_ids, payload)
 
-        link_map = await self.repository.load_links_for_items(item_ids) if payload.include_links else {}
+        link_map = (
+            await self.repository.memory_links.load_for_items(item_ids)
+            if payload.include_links
+            else {}
+        )
         serialized_items = [
             serialize_context_item(
                 item,
@@ -97,7 +105,7 @@ class RetrievalService:
         payload: GetContextInput,
     ) -> None:
         for item_id in item_ids:
-            await self.repository.create_event(
+            await self.repository.memory_item_events.create(
                 memory_item_id=item_id,
                 event_type="retrieved",
                 source="personal-agent-memory",

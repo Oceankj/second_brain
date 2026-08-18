@@ -41,7 +41,7 @@ uv run personal-agent-memory
 預設的 Docker Compose database URL 是：
 
 ```text
-postgresql://postgres:postgres@localhost:5433/personal_agent_memory
+postgresql://postgres:postgres@localhost:5432/personal_agent_memory
 ```
 
 如果你已經有自己的 Docker PostgreSQL 或其他 local PostgreSQL，這個 Compose service 不是必要的；把 `DATABASE_URL` 指到你的 database，然後用你的 migration 流程套 [migrations/001_p0_schema.sql](migrations/001_p0_schema.sql)。細節見 [scripts/db/README.md](scripts/db/README.md)。
