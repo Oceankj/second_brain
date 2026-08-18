@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from personal_agent_memory.embeddings import EmbeddingProvider
+from personal_agent_memory.providers.embeddings import EmbeddingProvider
 from personal_agent_memory.repository import PostgresMemoryRepository
 from personal_agent_memory.services.chunking import chunk_text
 from personal_agent_memory.tool_schemas import IngestTurnInput

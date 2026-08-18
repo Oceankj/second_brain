@@ -1,7 +1,7 @@
 import asyncio
 import math
 
-from personal_agent_memory.embeddings import HashEmbeddingProvider, to_pgvector
+from personal_agent_memory.providers.embeddings import HashEmbeddingProvider, to_pgvector
 
 
 def test_hash_embedding_is_deterministic_and_normalized() -> None:

@@ -86,7 +86,7 @@ Resources 與 prompts 先作為 MCP-first 設計邊界記錄；是否進入 P0 �
 
 目前實作骨架採用 Python FastMCP，入口在 `src/personal_agent_memory/server.py`。
 
-第一版先用 deterministic hash embedding provider，讓 ingestion 與 pgvector retrieval 的 vertical slice 可以本機跑通。之後接真實 embedding model 時，替換 `src/personal_agent_memory/embeddings.py` 的 provider 即可。
+第一版先用 deterministic hash embedding provider，讓 ingestion 與 pgvector retrieval 的 vertical slice 可以本機跑通。之後接真實 embedding model 時，替換 `src/personal_agent_memory/providers/embeddings.py` 的 provider 即可。
 
 ## Memory Source
 

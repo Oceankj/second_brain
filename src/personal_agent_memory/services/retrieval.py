@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from personal_agent_memory.embeddings import EmbeddingProvider
+from personal_agent_memory.providers.embeddings import EmbeddingProvider
 from personal_agent_memory.repository import PostgresMemoryRepository
 from personal_agent_memory.tool_schemas import GetContextInput
 from personal_agent_memory.utils.serialization import (

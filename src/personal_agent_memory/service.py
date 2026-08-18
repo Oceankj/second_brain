@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from personal_agent_memory.embeddings import EmbeddingProvider
+from personal_agent_memory.providers.embeddings import EmbeddingProvider
 from personal_agent_memory.repository import PostgresMemoryRepository
 from personal_agent_memory.services.ingestion import IngestionService
+from personal_agent_memory.services.markdown import MarkdownService
 from personal_agent_memory.services.retrieval import RetrievalService
 from personal_agent_memory.tool_schemas import GetContextInput, IngestTurnInput
 
@@ -30,6 +31,7 @@ class MemoryService:
             repository=repository,
             embedding_provider=embedding_provider,
         )
+        self.markdown = MarkdownService()
 
     async def ingest_turn(self, payload: IngestTurnInput) -> dict[str, Any]:
         return await self.ingestion.ingest_turn(payload)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from personal_agent_memory.embeddings import to_pgvector
+from personal_agent_memory.providers.embeddings import to_pgvector
 from personal_agent_memory.repository.types import Connect
 
 

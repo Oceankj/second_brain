@@ -35,7 +35,7 @@ P1 之後再處理 hash-based chunk reuse、full-text search、reranking、daily
 
 ### Replaceable providers
 
-目前 `embeddings.py` 使用 `HashEmbeddingProvider`，這是 deterministic local placeholder。它讓 migration、chunking、pgvector search、tool response shape 可以先跑通，不需要外部 API key。
+目前 `providers/embeddings.py` 使用 `HashEmbeddingProvider`，這是 deterministic local placeholder。它讓 migration、chunking、pgvector search、tool response shape 可以先跑通，不需要外部 API key。
 
 之後接真實 embedding model 時，應該新增 provider 並符合這個 protocol：
 
@@ -56,7 +56,8 @@ personal_agent_memory/
   tool_schemas.py Pydantic models matching docs/schemas JSON Schema intent.
   service.py      Thin facade that composes use-case services.
   repository/     PostgreSQL/pgvector persistence adapters by table.
-  embeddings.py   Embedding provider protocol and placeholder provider.
+  providers/
+    embeddings.py Embedding provider protocol and placeholder provider.
   services/
     ingestion.py   ingest_turn use case.
     retrieval.py   get_context use case.
@@ -211,7 +212,7 @@ Avoid:
 - Ranking policies beyond database sort needed for retrieval.
 - LLM extraction or summarization.
 
-### `embeddings.py`
+### `providers/embeddings.py`
 
 This owns the embedding provider boundary. The placeholder provider is deterministic and local; production provider code should stay behind the same interface.
 
