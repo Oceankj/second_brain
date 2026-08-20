@@ -10,6 +10,20 @@
       "type": "string",
       "description": "精簡、可引用、可追溯的相關 durable memory context；不是 reasoning result。"
     },
+    "compact_context_char_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Character count of compact_context after budget enforcement."
+    },
+    "context_truncated": {
+      "type": "boolean",
+      "description": "True when compact_context was truncated to fit max_context_chars."
+    },
+    "max_context_chars": {
+      "type": "integer",
+      "minimum": 500,
+      "maximum": 50000
+    },
     "items": {
       "type": "array",
       "items": {

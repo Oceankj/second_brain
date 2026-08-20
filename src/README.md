@@ -75,17 +75,19 @@ personal_agent_memory/
 
 `MemoryService` delegates to `IngestionService.ingest_turn`, which then:
 
-1. Builds a durable memory body from user input and assistant output.
-2. Creates a `memory_items` row with `type = note` and `status = candidate`.
-3. Splits the body into chunks.
-4. Embeds every chunk.
-5. Inserts `memory_chunks`.
-6. Normalizes metadata tags and upserts `tags`.
-7. Inserts `memory_item_tags`.
-8. Detects `[[wikilinks]]` in the body.
-9. Resolves matching titles and inserts `memory_links`.
-10. Inserts a `created` event into `memory_item_events`.
-11. Returns an `ingest_turn.output` shaped response.
+1. Evaluates the ingest policy from `metadata.ingest_reason` / `skip_memory`.
+2. Returns `status=skipped` without writes when the turn is not durable memory.
+3. Builds a durable memory body from user input and assistant output.
+4. Creates a `memory_items` row with `type = note` and `status = candidate`.
+5. Splits the body into chunks.
+6. Embeds every chunk.
+7. Inserts `memory_chunks`.
+8. Normalizes metadata tags and upserts `tags`.
+9. Inserts `memory_item_tags`.
+10. Detects `[[wikilinks]]` in the body.
+11. Resolves matching titles and inserts `memory_links`.
+12. Inserts a `created` event into `memory_item_events`.
+13. Returns an `ingest_turn.output` shaped response.
 
 The current extraction strategy is intentionally simple: one interaction becomes one candidate note. Later, this can become LLM-assisted extraction without changing the MCP tool boundary.
 
@@ -103,7 +105,8 @@ The current extraction strategy is intentionally simple: one interaction becomes
 6. Writes `retrieved` events for returned items.
 7. Optionally loads outgoing links and backlinks.
 8. Builds `compact_context`.
-9. Returns a `get_context.output` shaped response.
+9. Truncates `compact_context` to `max_context_chars`.
+10. Returns a `get_context.output` shaped response.
 
 The current version does not yet implement recent diary relevance, tag candidate boosting, typed link expansion, full-text search, or reranking. Those belong after the P0 write/read path is proven.
 

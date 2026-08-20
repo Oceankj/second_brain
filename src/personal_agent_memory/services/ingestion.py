@@ -5,6 +5,7 @@ from typing import Any
 from personal_agent_memory.providers.embeddings import EmbeddingProvider
 from personal_agent_memory.repository import PostgresMemoryRepository
 from personal_agent_memory.services.chunking import chunk_text
+from personal_agent_memory.services.ingest_policy import evaluate_ingest_policy
 from personal_agent_memory.tool_schemas import IngestTurnInput
 from personal_agent_memory.utils.serialization import (
     serialize_event,
@@ -35,6 +36,19 @@ class IngestionService:
         self.chunk_overlap_chars = chunk_overlap_chars
 
     async def ingest_turn(self, payload: IngestTurnInput) -> dict[str, Any]:
+        policy_decision = evaluate_ingest_policy(payload.metadata)
+        if not policy_decision.should_ingest:
+            return {
+                "status": "skipped",
+                "skip_reason": policy_decision.reason,
+                "candidate_items": [],
+                "profile_memory_updates": [],
+                "diary_material_enqueued": False,
+                "tags": [],
+                "links": [],
+                "events": [],
+            }
+
         body = build_turn_body(payload.user_input, payload.assistant_output)
         item = await self.repository.memory_items.create(
             item_type="note",

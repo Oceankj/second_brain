@@ -171,6 +171,30 @@ async def check_mcp_tool_calls() -> None:
                 print(f"OK: MCP tools listed: {', '.join(sorted(REQUIRED_TOOLS))}")
 
                 run_id = uuid4().hex[:12]
+                skipped_result = await session.call_tool(
+                    "ingest_turn",
+                    arguments={
+                        "user_input": f"Smoke test skipped memory source {run_id}",
+                        "assistant_output": (
+                            "This should be skipped because it has no policy signal."
+                        ),
+                        "metadata": {
+                            "timestamp": datetime.now(UTC).isoformat(),
+                            "source": "smoke_test",
+                            "app": "scripts/smoke_test.py",
+                            "user_id": "smoke-user",
+                            "session_id": f"smoke-{run_id}",
+                            "tags": ["smoke-test", "mcp"],
+                        },
+                    },
+                )
+                skipped_payload = parse_tool_payload(skipped_result)
+                if skipped_payload.get("status") != "skipped":
+                    raise RuntimeError(
+                        f"ingest_turn without ingest_reason should skip: {skipped_payload}"
+                    )
+                print("OK: MCP ingest_turn policy skipped unqualified turn")
+
                 ingest_result = await session.call_tool(
                     "ingest_turn",
                     arguments={
@@ -185,6 +209,7 @@ async def check_mcp_tool_calls() -> None:
                             "user_id": "smoke-user",
                             "session_id": f"smoke-{run_id}",
                             "tags": ["smoke-test", "mcp"],
+                            "ingest_reason": "task_completed",
                         },
                     },
                 )
@@ -200,6 +225,7 @@ async def check_mcp_tool_calls() -> None:
                         "user_id": "smoke-user",
                         "session_id": f"smoke-{run_id}",
                         "limit": 5,
+                        "max_context_chars": 6000,
                         "include_links": True,
                         "include_chunks": True,
                     },
@@ -207,6 +233,8 @@ async def check_mcp_tool_calls() -> None:
                 context_payload = parse_tool_payload(context_result)
                 if not context_payload.get("items"):
                     raise RuntimeError(f"get_context returned no items: {context_payload}")
+                if context_payload.get("compact_context_char_count", 0) > 6000:
+                    raise RuntimeError(f"get_context exceeded context budget: {context_payload}")
                 print(f"OK: MCP get_context returned {len(context_payload['items'])} item(s)")
             except RuntimeError as exc:
                 error = exc

@@ -113,8 +113,8 @@ uv run python scripts/smoke_test.py
 - 呼叫 Ollama `/api/embed`，確認 embedding model 可用且維度符合設定。
 - 用 MCP stdio client 啟動 `personal_agent_memory.server`。
 - `list_tools` 檢查 `ingest_turn` / `get_context`。
-- 呼叫 `ingest_turn`，透過 Ollama embeddings 寫入一筆 smoke memory。
-- 呼叫 `get_context`，透過 Ollama embeddings + pgvector retrieval 確認至少回傳一筆 item。
+- 呼叫帶有 `metadata.ingest_reason` 的 `ingest_turn`，透過 Ollama embeddings 寫入一筆 smoke memory。
+- 呼叫帶有 `max_context_chars` 的 `get_context`，透過 Ollama embeddings + pgvector retrieval 確認至少回傳一筆 item。
 
 ## Documentation Shape
 
@@ -180,7 +180,19 @@ Tags 負責分類，links 負責具體關聯。建立新 note 前應該先搜尋
 
 ## Update Timing
 
-每次對話結束或每次 turn 完成後，`ingest_turn` 可以先建立 raw-ish 的 candidate note。它不一定馬上合併到既有 note，避免在對話主流程中做太重的整理。
+每次對話結束或每次 turn 完成後，外層 agent 只有在符合 ingest policy 時才應呼叫 `ingest_turn` 建立 raw-ish 的 candidate note。P0 要求 `metadata.ingest_reason` 明確說明寫入原因；沒有原因時 server 會回傳 `skipped` 並且不寫 DB。
+
+MVP 允許的 `ingest_reason`：
+
+- `task_completed`
+- `explicit_memory_request`
+- `user_preference`
+- `stable_fact`
+- `decision`
+- `stable_artifact`
+- `manual_import`
+
+`get_context` 會用 `max_context_chars` 對 `compact_context` 做 server-side hard budget，避免外層 agent 一次拿太多 memory 塞進 prompt。預設是 6000 chars。
 
 每天結束、準備關掉 app、或 app init 時發現有日期缺少 summary，就執行 daily tasks：
 

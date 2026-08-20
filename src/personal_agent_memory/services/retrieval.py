@@ -9,6 +9,7 @@ from personal_agent_memory.tool_schemas import GetContextInput
 from personal_agent_memory.utils.serialization import (
     build_compact_context,
     serialize_context_item,
+    truncate_text,
 )
 
 
@@ -53,8 +54,16 @@ class RetrievalService:
             for item in ranked_items
         ]
 
+        compact_context, context_truncated = truncate_text(
+            build_compact_context(serialized_items),
+            payload.max_context_chars,
+        )
+
         return {
-            "compact_context": build_compact_context(serialized_items),
+            "compact_context": compact_context,
+            "compact_context_char_count": len(compact_context),
+            "context_truncated": context_truncated,
+            "max_context_chars": payload.max_context_chars,
             "items": serialized_items,
             "searched_types": list(payload.memory_types),
             "generated_at": datetime.now(UTC).isoformat(),

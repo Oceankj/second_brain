@@ -41,6 +41,13 @@
       "maximum": 50,
       "default": 10
     },
+    "max_context_chars": {
+      "type": "integer",
+      "minimum": 500,
+      "maximum": 50000,
+      "default": 6000,
+      "description": "Hard character budget for compact_context. Returned items may still include structured provenance."
+    },
     "include_links": {
       "type": "boolean",
       "default": true

@@ -8,10 +8,19 @@ from personal_agent_memory.providers.embeddings import (
     OllamaEmbeddingProvider,
     to_pgvector,
 )
+from personal_agent_memory.utils.serialization import truncate_text
 
 
 def test_to_pgvector_formats_vector_literal() -> None:
     assert to_pgvector([0.1, -0.2]) == "[0.10000000,-0.20000000]"
+
+
+def test_truncate_text_enforces_hard_character_budget() -> None:
+    truncated, did_truncate = truncate_text("abcdefghijklmnopqrstuvwxyz", 24)
+
+    assert did_truncate
+    assert len(truncated) <= 24
+    assert truncated.endswith("truncated]")
 
 
 def test_ollama_embedding_provider_posts_embedding_request(monkeypatch: pytest.MonkeyPatch) -> None:

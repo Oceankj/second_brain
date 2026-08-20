@@ -78,3 +78,15 @@ def build_compact_context(items: list[dict[str, Any]]) -> str:
     for item in items:
         blocks.append(f"[{item['type']}] {item['title']}\n{item['body']}")
     return "\n\n---\n\n".join(blocks)
+
+
+# TODO: Use more elegant truncation strategy.
+def truncate_text(text: str, max_chars: int) -> tuple[str, bool]:
+    if len(text) <= max_chars:
+        return text, False
+
+    suffix = "\n\n[context truncated]"
+    if max_chars <= len(suffix):
+        return suffix[:max_chars], True
+
+    return text[: max_chars - len(suffix)].rstrip() + suffix, True

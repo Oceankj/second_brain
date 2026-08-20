@@ -8,6 +8,15 @@ from pydantic import BaseModel, ConfigDict, Field
 MemoryItemType = Literal["note", "diary", "profile_memory"]
 MemoryItemStatus = Literal["candidate", "active", "archived"]
 MemoryLinkType = Literal["references"]
+IngestReason = Literal[
+    "task_completed",
+    "explicit_memory_request",
+    "user_preference",
+    "stable_fact",
+    "decision",
+    "stable_artifact",
+    "manual_import",
+]
 
 
 class GetContextInput(BaseModel):
@@ -21,6 +30,7 @@ class GetContextInput(BaseModel):
     )
     diary_lookback_days: int = Field(default=2, ge=0, le=7)
     limit: int = Field(default=10, ge=1, le=50)
+    max_context_chars: int = Field(default=6000, ge=500, le=50000)
     include_links: bool = True
     link_expansion_depth: int = Field(default=1, ge=0, le=2)
     include_chunks: bool = False
@@ -36,6 +46,8 @@ class IngestTurnMetadata(BaseModel):
     session_id: str | None = None
     conversation_id: str | None = None
     tags: list[str] = Field(default_factory=list)
+    ingest_reason: IngestReason | None = None
+    skip_memory: bool = False
 
 
 class IngestTurnInput(BaseModel):

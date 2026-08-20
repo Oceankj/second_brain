@@ -17,6 +17,7 @@ get_context(input, user_id, session_id?)
   -> merge and deduplicate results
   -> log retrieval events for returned memory items
   -> optionally include outgoing links and backlinks
+  -> enforce max_context_chars on compact_context
   -> return related durable memory context
 ```
 
@@ -41,6 +42,8 @@ Output schema:
 - P0 會記錄 returned memory items 的 `retrieved` events，作為未來 hot/cold ranking 的 raw signals。
 - 若 `include_links` 為 true，回傳 outgoing links 與 backlinks。
 - 若 `include_chunks` 為 true，可以回傳命中的 chunk；預設應避免過量 token。
+- `max_context_chars` 是 `compact_context` 的 server-side hard budget，預設 6000。超過時會截斷 `compact_context` 並回傳 `context_truncated=true`。
+- `items` 保留結構化 provenance；外層 agent 應優先把 `compact_context` 放進 prompt，而不是直接 dump `items`。
 
 ### Side Effects
 
@@ -55,6 +58,7 @@ Output schema:
   "session_id": "codex-2026-07-30",
   "diary_lookback_days": 2,
   "link_expansion_depth": 1,
+  "max_context_chars": 6000,
   "limit": 10
 }
 ```
@@ -65,6 +69,8 @@ Output schema:
 
 ```text
 ingest_turn(user_input, assistant_output, metadata)
+  -> evaluate ingest policy from metadata
+  -> skip without writes when policy says this turn is not durable memory
   -> extract candidate memories
   -> normalize tags
   -> create candidate memory_items
@@ -89,6 +95,9 @@ Output schema:
 ### Behavior
 
 - Memory source 是完整 interaction，不只是 assistant output。
+- P0 要求 caller 提供 `metadata.ingest_reason`，避免每輪 raw output 都無腦寫入 durable memory。
+- 若 `metadata.skip_memory=true`，或缺少 `metadata.ingest_reason`，`ingest_turn` 會回傳 `status=skipped` 並且不寫 DB。
+- 允許的 `ingest_reason` 是 `task_completed`、`explicit_memory_request`、`user_preference`、`stable_fact`、`decision`、`stable_artifact`、`manual_import`。
 - P0 可以先產生 `candidate` memory item，不急著在主流程合併到既有 note。
 - Profile memory 只有在 evidence 足夠穩定時才更新。
 - Diary material 可以先進入每日整理佇列，由 daily maintenance 建立 diary entry。
@@ -117,6 +126,7 @@ Output schema:
     "source": "codex",
     "app": "Codex Desktop",
     "session_id": "codex-2026-07-30",
+    "ingest_reason": "task_completed",
     "tags": ["personal-memory", "mcp"]
   }
 }

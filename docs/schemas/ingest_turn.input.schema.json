@@ -45,8 +45,31 @@
           "items": {
             "type": "string"
           }
+        },
+        "ingest_reason": {
+          "$ref": "#/$defs/ingest_reason"
+        },
+        "skip_memory": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true, ingest_turn returns skipped and does not write durable memory."
         }
       }
+    }
+  },
+  "$defs": {
+    "ingest_reason": {
+      "type": "string",
+      "description": "Explicit caller policy signal explaining why this interaction should become durable memory.",
+      "enum": [
+        "task_completed",
+        "explicit_memory_request",
+        "user_preference",
+        "stable_fact",
+        "decision",
+        "stable_artifact",
+        "manual_import"
+      ]
     }
   }
 }

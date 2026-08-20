@@ -8,7 +8,11 @@
   "properties": {
     "status": {
       "type": "string",
-      "enum": ["accepted"]
+      "enum": ["accepted", "skipped"]
+    },
+    "skip_reason": {
+      "type": ["string", "null"],
+      "description": "Present when status is skipped."
     },
     "candidate_items": {
       "type": "array",
