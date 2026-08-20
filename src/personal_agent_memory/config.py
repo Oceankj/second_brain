@@ -8,7 +8,10 @@ from pathlib import Path
 @dataclass(frozen=True)
 class Settings:
     database_url: str
-    embedding_dimension: int = 1536
+    embedding_dimension: int = 1024
+    ollama_embedding_model: str = "qwen3-embedding:0.6b"
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_timeout_seconds: float = 30.0
     max_chunk_chars: int = 1800
     chunk_overlap_chars: int = 200
 
@@ -22,7 +25,13 @@ def load_settings() -> Settings:
 
     return Settings(
         database_url=database_url,
-        embedding_dimension=int(os.environ.get("MEMORY_EMBEDDING_DIMENSION", "1536")),
+        embedding_dimension=int(os.environ.get("MEMORY_EMBEDDING_DIMENSION", "1024")),
+        ollama_embedding_model=os.environ.get(
+            "OLLAMA_EMBEDDING_MODEL",
+            "qwen3-embedding:0.6b",
+        ),
+        ollama_base_url=os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434"),
+        ollama_timeout_seconds=float(os.environ.get("OLLAMA_TIMEOUT_SECONDS", "30")),
         max_chunk_chars=int(os.environ.get("MEMORY_MAX_CHUNK_CHARS", "1800")),
         chunk_overlap_chars=int(os.environ.get("MEMORY_CHUNK_OVERLAP_CHARS", "200")),
     )

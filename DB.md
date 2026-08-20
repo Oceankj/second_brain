@@ -69,7 +69,7 @@ create table memory_chunks (
   memory_item_id uuid not null references memory_items(id) on delete cascade,
   chunk_index integer not null,
   content text not null,
-  embedding vector(1536) not null,
+  embedding vector(:embedding_dimension) not null,
   token_count integer,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -84,7 +84,9 @@ create table memory_chunks (
 - `embedding`: pgvector embedding，用於 retrieval。
 - `token_count`: 用於 token budgeting 與未來 re-chunking。如果尚未計算，可以是 null。
 
-Vector dimension 應該要跟選定的 embedding model 一致。`1536` 只是 placeholder；如果 embedding model 使用不同 dimension，需要調整。
+Vector dimension 應該要跟選定的 embedding model 一致。`scripts/db/migrate.sh` 會把 `MEMORY_EMBEDDING_DIMENSION` 傳給 migration 的 `embedding_dimension` psql variable；直接執行 migration 時預設為 `1024`。目前預設的 local Ollama `qwen3-embedding:0.6b` 使用 `1024` 維。
+
+注意：這只會影響 fresh table creation。既有 `memory_chunks.embedding` 欄位不會因為重跑 `create table if not exists` 自動改維度；更換維度需要新 migration 並重新 embedding existing chunks。
 
 ## memory_links
 

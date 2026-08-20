@@ -4,8 +4,8 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from personal_agent_memory.config import load_settings
-from personal_agent_memory.providers.embeddings import HashEmbeddingProvider
+from personal_agent_memory.config import Settings, load_settings
+from personal_agent_memory.providers.embeddings import EmbeddingProvider, OllamaEmbeddingProvider
 from personal_agent_memory.repository import PostgresMemoryRepository
 from personal_agent_memory.service import MemoryService
 from personal_agent_memory.tool_schemas import GetContextInput, IngestTurnInput
@@ -20,11 +20,20 @@ def get_service() -> MemoryService:
         settings = load_settings()
         _service = MemoryService(
             repository=PostgresMemoryRepository(settings.database_url),
-            embedding_provider=HashEmbeddingProvider(settings.embedding_dimension),
+            embedding_provider=build_embedding_provider(settings),
             max_chunk_chars=settings.max_chunk_chars,
             chunk_overlap_chars=settings.chunk_overlap_chars,
         )
     return _service
+
+
+def build_embedding_provider(settings: Settings) -> EmbeddingProvider:
+    return OllamaEmbeddingProvider(
+        model=settings.ollama_embedding_model,
+        dimension=settings.embedding_dimension,
+        base_url=settings.ollama_base_url,
+        timeout_seconds=settings.ollama_timeout_seconds,
+    )
 
 
 @mcp.tool()

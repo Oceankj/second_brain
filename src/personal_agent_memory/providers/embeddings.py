@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import hashlib
-import math
-import re
+import asyncio
+import json
+import urllib.error
+import urllib.request
 from typing import Protocol
-
-TOKEN_RE = re.compile(r"[\w\u4e00-\u9fff]+", re.UNICODE)
 
 
 class EmbeddingProvider(Protocol):
@@ -13,32 +12,75 @@ class EmbeddingProvider(Protocol):
         """Return an embedding vector for text."""
 
 
-class HashEmbeddingProvider:
-    """Deterministic local embedding placeholder for the first P0 vertical slice."""
+class OllamaEmbeddingProvider:
+    """Embedding provider backed by Ollama's local /api/embed endpoint."""
 
-    def __init__(self, dimension: int = 1536) -> None:
-        if dimension <= 0:
+    def __init__(
+        self,
+        *,
+        model: str = "qwen3-embedding:0.6b",
+        dimension: int | None = 1024,
+        base_url: str = "http://localhost:11434",
+        timeout_seconds: float = 30.0,
+    ) -> None:
+        if not model:
+            raise ValueError("model is required for OllamaEmbeddingProvider")
+        if dimension is not None and dimension <= 0:
             raise ValueError("dimension must be positive")
+        if timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be positive")
+
+        self.model = model
         self.dimension = dimension
+        self.base_url = base_url.rstrip("/")
+        self.timeout_seconds = timeout_seconds
 
     async def embed_text(self, text: str) -> list[float]:
-        vector = [0.0] * self.dimension
-        tokens = TOKEN_RE.findall(text.lower())
+        return await asyncio.to_thread(self._embed_text_sync, text)
 
-        if not tokens:
-            tokens = [text.lower()]
+    def _embed_text_sync(self, text: str) -> list[float]:
+        payload: dict[str, object] = {
+            "model": self.model,
+            "input": text,
+        }
 
-        for token in tokens:
-            digest = hashlib.blake2b(token.encode("utf-8"), digest_size=8).digest()
-            raw = int.from_bytes(digest, "big")
-            index = raw % self.dimension
-            sign = 1.0 if (raw >> 1) % 2 == 0 else -1.0
-            vector[index] += sign
+        request = urllib.request.Request(
+            f"{self.base_url}/api/embed",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
 
-        norm = math.sqrt(sum(value * value for value in vector))
-        if norm == 0:
-            return vector
-        return [value / norm for value in vector]
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+                body = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            error_body = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(
+                f"Ollama embeddings request failed with HTTP {exc.code}: {error_body}"
+            ) from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"Ollama embeddings request failed: {exc.reason}") from exc
+
+        try:
+            embedding = body["embeddings"][0]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise RuntimeError("Ollama embeddings response did not contain an embedding") from exc
+
+        if not isinstance(embedding, list) or not all(
+            isinstance(value, int | float) for value in embedding
+        ):
+            raise RuntimeError("Ollama embeddings response had an invalid embedding shape")
+
+        if self.dimension is not None and len(embedding) != self.dimension:
+            raise RuntimeError(
+                "Ollama embedding dimension mismatch: "
+                f"expected {self.dimension}, got {len(embedding)}"
+            )
+
+        return [float(value) for value in embedding]
 
 
 def to_pgvector(vector: list[float]) -> str:

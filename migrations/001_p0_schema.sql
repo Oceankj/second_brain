@@ -1,3 +1,10 @@
+\if :{?embedding_dimension}
+\else
+\set embedding_dimension 1024
+\endif
+
+\echo Using embedding_dimension=:embedding_dimension
+
 create extension if not exists pgcrypto;
 create extension if not exists vector;
 
@@ -66,7 +73,7 @@ create table if not exists memory_chunks (
   memory_item_id uuid not null references memory_items(id) on delete cascade,
   chunk_index integer not null,
   content text not null,
-  embedding vector(1536) not null,
+  embedding vector(:embedding_dimension) not null,
   token_count integer,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),

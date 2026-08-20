@@ -11,5 +11,6 @@ for migration in "$ROOT_DIR"/migrations/*.sql; do
   echo "Applying $(basename "$migration")..."
   docker_compose exec -T db \
     psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 \
+      -v embedding_dimension="$MEMORY_EMBEDDING_DIMENSION" \
     < "$migration"
 done

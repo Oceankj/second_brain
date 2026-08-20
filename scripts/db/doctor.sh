@@ -30,6 +30,10 @@ docker_compose exec -T db \
 "
 
 echo
+echo "Embedding dimension setting:"
+echo "MEMORY_EMBEDDING_DIMENSION=$MEMORY_EMBEDDING_DIMENSION"
+
+echo
 echo "Memory columns:"
 docker_compose exec -T db \
   psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c "
@@ -38,4 +42,15 @@ docker_compose exec -T db \
   where table_schema = 'public'
     and (table_name like 'memory_%' or table_name = 'tags')
   order by table_name, ordinal_position;
+"
+
+echo
+echo "Memory chunk embedding type:"
+docker_compose exec -T db \
+  psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c "
+  select format_type(a.atttypid, a.atttypmod) as embedding_type
+  from pg_attribute a
+  where a.attrelid = 'memory_chunks'::regclass
+    and a.attname = 'embedding'
+    and not a.attisdropped;
 "

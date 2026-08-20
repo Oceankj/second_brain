@@ -20,5 +20,30 @@ services:
       timeout: 5s
       retries: 12
 
+  ollama:
+    image: ollama/ollama:latest
+    container_name: personal-agent-memory-ollama
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - personal_agent_memory_ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+
+  ollama-pull:
+    image: ollama/ollama:latest
+    container_name: personal-agent-memory-ollama-pull
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    command: ["pull", "${OLLAMA_EMBEDDING_MODEL:-qwen3-embedding:0.6b}"]
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: "no"
+
 volumes:
   personal_agent_memory_pgdata:
+  personal_agent_memory_ollama:

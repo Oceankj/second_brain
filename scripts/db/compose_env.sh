@@ -2,6 +2,23 @@
 
 ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 
+PRESERVED_ENV_VARS="
+POSTGRES_DB
+POSTGRES_USER
+POSTGRES_PASSWORD
+POSTGRES_PORT
+OLLAMA_PORT
+OLLAMA_BASE_URL
+OLLAMA_EMBEDDING_MODEL
+MEMORY_EMBEDDING_DIMENSION
+DATABASE_URL
+"
+
+for env_name in $PRESERVED_ENV_VARS; do
+  eval "__had_$env_name=\${$env_name+x}"
+  eval "__value_$env_name=\${$env_name-}"
+done
+
 if [ -f "$ROOT_DIR/.env" ]; then
   set -a
   # shellcheck disable=SC1091
@@ -9,10 +26,22 @@ if [ -f "$ROOT_DIR/.env" ]; then
   set +a
 fi
 
+for env_name in $PRESERVED_ENV_VARS; do
+  eval "env_was_set=\${__had_$env_name-}"
+  if [ -n "$env_was_set" ]; then
+    eval "$env_name=\$__value_$env_name"
+    export "$env_name"
+  fi
+done
+
 POSTGRES_DB="${POSTGRES_DB:-personal_agent_memory}"
 POSTGRES_USER="${POSTGRES_USER:-postgres}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-postgres}"
 POSTGRES_PORT="${POSTGRES_PORT:-5432}"
+OLLAMA_PORT="${OLLAMA_PORT:-11434}"
+OLLAMA_BASE_URL="${OLLAMA_BASE_URL:-http://localhost:$OLLAMA_PORT}"
+OLLAMA_EMBEDDING_MODEL="${OLLAMA_EMBEDDING_MODEL:-qwen3-embedding:0.6b}"
+MEMORY_EMBEDDING_DIMENSION="${MEMORY_EMBEDDING_DIMENSION:-1024}"
 COMPOSE_DATABASE_URL="postgresql://$POSTGRES_USER:$POSTGRES_PASSWORD@localhost:$POSTGRES_PORT/$POSTGRES_DB"
 DATABASE_URL="${DATABASE_URL:-$COMPOSE_DATABASE_URL}"
 

@@ -35,9 +35,9 @@ P1 之後再處理 hash-based chunk reuse、full-text search、reranking、daily
 
 ### Replaceable providers
 
-目前 `providers/embeddings.py` 使用 `HashEmbeddingProvider`，這是 deterministic local placeholder。它讓 migration、chunking、pgvector search、tool response shape 可以先跑通，不需要外部 API key。
+目前 `providers/embeddings.py` 使用 `OllamaEmbeddingProvider` 作為 runtime embedding provider。Service layer 仍依賴 `EmbeddingProvider` protocol，讓測試可以注入 deterministic fake provider，而不是讓 production server 用 env 切換到測試 provider。
 
-之後接真實 embedding model 時，應該新增 provider 並符合這個 protocol：
+如果之後要支援其他 production embedding backend，應該新增明確的 provider 並符合這個 protocol：
 
 ```python
 class EmbeddingProvider(Protocol):
@@ -45,7 +45,7 @@ class EmbeddingProvider(Protocol):
         ...
 ```
 
-不要把 OpenAI、local model 或其他 provider 的細節散落到 service/repository。
+不要把 Ollama 或其他 provider 的細節散落到 service/repository。
 
 ## Module Map
 
@@ -57,7 +57,7 @@ personal_agent_memory/
   service.py      Thin facade that composes use-case services.
   repository/     PostgreSQL/pgvector persistence adapters by table.
   providers/
-    embeddings.py Embedding provider protocol and placeholder provider.
+    embeddings.py Embedding provider protocol and Ollama provider.
   services/
     ingestion.py   ingest_turn use case.
     retrieval.py   get_context use case.
@@ -214,12 +214,12 @@ Avoid:
 
 ### `providers/embeddings.py`
 
-This owns the embedding provider boundary. The placeholder provider is deterministic and local; production provider code should stay behind the same interface.
+This owns the embedding provider boundary. The runtime provider calls Ollama embeddings; tests can inject deterministic fakes through the same `EmbeddingProvider` protocol.
 
 If the embedding dimension changes, update both:
 
 - `MEMORY_EMBEDDING_DIMENSION`
-- `migrations/001_p0_schema.sql`, currently `vector(1536)`
+- a fresh database, or a migration that changes `memory_chunks.embedding` and re-embeds chunks
 
 For an existing database, changing dimension requires a new migration and re-embedding existing chunks.
 
@@ -234,7 +234,7 @@ The migration in `migrations/001_p0_schema.sql` follows the P0 DB spec:
 - `memory_item_tags`
 - `memory_item_events`
 
-`memory_chunks.embedding` uses `vector(1536)` and an HNSW cosine index. The app assumes the runtime embedding provider returns the same dimension.
+`memory_chunks.embedding` uses `vector(1024)` and an HNSW cosine index. The app assumes the runtime embedding provider returns the same dimension.
 
 ## What Is Intentionally Missing
 
@@ -262,5 +262,4 @@ They should be added once the local vertical slice is exercised end to end.
 4. Start the server with `uv run personal-agent-memory`.
 5. Call `ingest_turn` with a small interaction.
 6. Call `get_context` with related input and inspect returned `compact_context`.
-7. Replace `HashEmbeddingProvider` with a real embedding provider.
-8. Add integration tests around the DB-backed vertical slice.
+7. Add integration tests around the DB-backed vertical slice.

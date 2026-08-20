@@ -6,12 +6,18 @@
 
 ## Quick Start
 
-目前 quick start 只涵蓋已經實作到的本機開發流程：安裝依賴、啟動 PostgreSQL + pgvector、套 P0 schema、啟動 stdio MCP server。
+這條流程只涵蓋本機啟動：安裝依賴、啟動 PostgreSQL + pgvector 與 Ollama、套 schema、啟動 stdio MCP server。
 
 安裝依賴：
 
 ```bash
 uv sync --extra dev
+```
+
+如果在 Codex sandbox 裡遇到 `~/.cache/uv` 權限問題，可以把 cache 放在 repo 內：
+
+```bash
+UV_CACHE_DIR=.uv-cache uv sync --extra dev
 ```
 
 準備本機環境設定：
@@ -20,11 +26,37 @@ uv sync --extra dev
 cp .env.example .env
 ```
 
-啟動本機 PostgreSQL + pgvector：
+預設使用本機 Ollama embeddings：
+
+```dotenv
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_EMBEDDING_MODEL=qwen3-embedding:0.6b
+MEMORY_EMBEDDING_DIMENSION=1024
+```
+
+`qwen3-embedding:0.6b` 預設搭配目前 schema 的 1024 維向量；如果改成其他模型或維度，DB schema 的 `memory_chunks.embedding vector(1024)` 也要一起調整。
+
+Migration 會讀 `.env` 的 `MEMORY_EMBEDDING_DIMENSION` 來建立 fresh database 的 vector 欄位。既有 database 不會被重跑 migration 自動改維度；換模型維度時需要 fresh DB 或另寫 migration。
+
+可以從 migration output 確認實際傳入值：
 
 ```bash
-scripts/db/up.sh
+MEMORY_EMBEDDING_DIMENSION=777 scripts/db/migrate.sh
 ```
+
+如果 env override 有生效，會看到：
+
+```text
+Using embedding_dimension=777
+```
+
+啟動本機 infra：
+
+```bash
+scripts/infra/up.sh
+```
+
+這會啟動 PostgreSQL + pgvector、Ollama，並 pull `.env` 裡的 embedding model。你也可以直接用 `docker compose up -d` 起服務；第一次 pull model 會花比較久。
 
 套用 P0 database schema：
 
@@ -32,7 +64,7 @@ scripts/db/up.sh
 scripts/db/migrate.sh
 ```
 
-啟動 stdio MCP server：
+啟動 stdio MCP server 給外層 agent runtime：
 
 ```bash
 uv run personal-agent-memory
@@ -44,7 +76,45 @@ uv run personal-agent-memory
 postgresql://postgres:postgres@localhost:5432/personal_agent_memory
 ```
 
+預設的 Ollama URL 是：
+
+```text
+http://localhost:11434
+```
+
 如果你已經有自己的 Docker PostgreSQL 或其他 local PostgreSQL，這個 Compose service 不是必要的；把 `DATABASE_URL` 指到你的 database，然後用你的 migration 流程套 [migrations/001_p0_schema.sql](migrations/001_p0_schema.sql)。細節見 [scripts/db/README.md](scripts/db/README.md)。
+
+## Verification
+
+檢查 DB extensions、tables 與欄位：
+
+```bash
+scripts/db/doctor.sh
+```
+
+跑單元測試與 lint：
+
+```bash
+uv run pytest
+uv run ruff check .
+```
+
+跑真實 MCP tool-call smoke test：
+
+```bash
+uv run python scripts/smoke_test.py
+```
+
+這個 smoke test 需要本機 Ollama 正在執行，且 `.env` 裡的 `OLLAMA_EMBEDDING_MODEL` 已可用。
+
+這個 smoke test 會：
+
+- 連到 `DATABASE_URL` 檢查必要 tables 與 `memory_link_type` enum。
+- 呼叫 Ollama `/api/embed`，確認 embedding model 可用且維度符合設定。
+- 用 MCP stdio client 啟動 `personal_agent_memory.server`。
+- `list_tools` 檢查 `ingest_turn` / `get_context`。
+- 呼叫 `ingest_turn`，透過 Ollama embeddings 寫入一筆 smoke memory。
+- 呼叫 `get_context`，透過 Ollama embeddings + pgvector retrieval 確認至少回傳一筆 item。
 
 ## Documentation Shape
 
@@ -86,7 +156,7 @@ Resources 與 prompts 先作為 MCP-first 設計邊界記錄；是否進入 P0 �
 
 目前實作骨架採用 Python FastMCP，入口在 `src/personal_agent_memory/server.py`。
 
-第一版先用 deterministic hash embedding provider，讓 ingestion 與 pgvector retrieval 的 vertical slice 可以本機跑通。之後接真實 embedding model 時，替換 `src/personal_agent_memory/providers/embeddings.py` 的 provider 即可。
+目前 runtime 使用 `src/personal_agent_memory/providers/embeddings.py` 的 Ollama embeddings provider。測試若需要 deterministic embeddings，應在 test code 裡注入 fake provider，不走 production server 設定。
 
 ## Memory Source
 
