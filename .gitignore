@@ -27,6 +27,7 @@ dist/
 build/
 coverage/
 .cache/
+.uv-cache/
 .tmp/
 tmp/
 
