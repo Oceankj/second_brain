@@ -26,12 +26,29 @@ UV_CACHE_DIR=.uv-cache uv sync --extra dev
 cp .env.example .env
 ```
 
+準備 memory 行為設定：
+
+```bash
+cp memory.example.json memory.json
+```
+
 預設使用本機 Ollama embeddings：
 
 ```dotenv
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_EMBEDDING_MODEL=qwen3-embedding:0.6b
 MEMORY_EMBEDDING_DIMENSION=1024
+```
+
+`.env` 主要保存 runtime environment 與 service connection，例如 `DATABASE_URL`、`OLLAMA_BASE_URL`、`OLLAMA_EMBEDDING_MODEL`。非 secret 的 memory 行為參數放在 `memory.json`，例如 chunking：
+
+```json
+{
+  "chunking": {
+    "max_chars": 1800,
+    "overlap_chars": 200
+  }
+}
 ```
 
 `qwen3-embedding:0.6b` 預設搭配目前 schema 的 1024 維向量；如果改成其他模型或維度，DB schema 的 `memory_chunks.embedding vector(1024)` 也要一起調整。
@@ -157,6 +174,8 @@ Resources 與 prompts 先作為 MCP-first 設計邊界記錄；是否進入 P0 �
 目前實作骨架採用 Python FastMCP，入口在 `src/personal_agent_memory/server.py`。
 
 目前 runtime 使用 `src/personal_agent_memory/providers/embeddings.py` 的 Ollama embeddings provider。測試若需要 deterministic embeddings，應在 test code 裡注入 fake provider，不走 production server 設定。
+
+Runtime settings 由 `.env` 與 optional `memory.json` 組成；`memory.json` 用於非 secret 的 memory behavior settings。
 
 ## Memory Source
 

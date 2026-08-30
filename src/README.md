@@ -52,7 +52,7 @@ class EmbeddingProvider(Protocol):
 ```text
 personal_agent_memory/
   server.py       FastMCP app and tool handlers.
-  config.py       Environment-backed runtime settings.
+  config.py       Environment-backed runtime settings plus memory.json behavior config.
   tool_schemas.py Pydantic models matching docs/schemas JSON Schema intent.
   service.py      Thin facade that composes use-case services.
   repository/     PostgreSQL/pgvector persistence adapters by table.

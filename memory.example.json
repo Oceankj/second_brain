@@ -1,0 +1,6 @@
+{
+  "chunking": {
+    "max_chars": 1800,
+    "overlap_chars": 200
+  }
+}
