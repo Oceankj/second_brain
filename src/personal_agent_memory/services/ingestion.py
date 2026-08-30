@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from personal_agent_memory.providers.embeddings import EmbeddingProvider
 from personal_agent_memory.repository import PostgresMemoryRepository
 from personal_agent_memory.services.chunking import chunk_text
 from personal_agent_memory.services.ingest_policy import evaluate_ingest_policy
-from personal_agent_memory.tool_schemas import IngestTurnInput
+from personal_agent_memory.tool_schemas import IngestReason, IngestTurnInput, MemoryItemType
 from personal_agent_memory.utils.serialization import (
     serialize_event,
     serialize_item,
@@ -19,6 +20,28 @@ from personal_agent_memory.utils.text_processing import (
     make_title,
     normalize_tags,
 )
+
+
+@dataclass(frozen=True)
+class ExtractedMemoryCandidate:
+    item_type: MemoryItemType
+    title: str
+    body: str
+    tags: list[str]
+    reason: IngestReason
+    evidence_source: str
+
+
+EVIDENCE_SOURCE_BY_REASON: dict[IngestReason, str] = {
+    "task_completed": "both",
+    "explicit_memory_request": "both",
+    "user_preference": "user_input",
+    "stable_fact": "user_input",
+    "personal_insight": "user_input",
+    "decision": "both",
+    "stable_artifact": "assistant_output",
+    "manual_import": "metadata",
+}
 
 
 class IngestionService:
@@ -42,40 +65,47 @@ class IngestionService:
                 "status": "skipped",
                 "skip_reason": policy_decision.reason,
                 "candidate_items": [],
-                "profile_memory_updates": [],
-                "diary_material_enqueued": False,
                 "tags": [],
                 "links": [],
                 "events": [],
             }
 
-        body = build_turn_body(payload.user_input, payload.assistant_output)
-        item = await self.repository.memory_items.create(
-            item_type="note",
-            title=make_title(payload.user_input),
-            body=body,
-            status="candidate",
-        )
+        candidate_items = []
+        all_tags = []
+        all_links = []
+        all_events = []
 
-        await self._create_chunks(item["id"], body)
-        tags = await self._attach_tags(item["id"], payload.metadata.tags)
-        links = await self._create_wikilinks(item["id"], body)
-        created_event = await self.repository.memory_item_events.create(
-            memory_item_id=item["id"],
-            event_type="created",
-            source=payload.metadata.source,
-            session_id=payload.metadata.session_id,
-            metadata=payload.metadata.model_dump(mode="json"),
-        )
+        for candidate in extract_memory_candidates(payload):
+            item = await self.repository.memory_items.create(
+                item_type=candidate.item_type,
+                ingest_reason=candidate.reason,
+                title=candidate.title,
+                body=candidate.body,
+                status="candidate",
+            )
+
+            await self._create_chunks(item["id"], candidate.body)
+            tags = await self._attach_tags(item["id"], candidate.tags)
+            links = await self._create_wikilinks(item["id"], candidate.body)
+            created_event = await self.repository.memory_item_events.create(
+                memory_item_id=item["id"],
+                event_type="created",
+                source=payload.metadata.source,
+                session_id=payload.metadata.session_id,
+                metadata=created_event_metadata(payload, candidate),
+            )
+
+            candidate_items.append(serialize_item(item, tags=tags))
+            all_tags.extend(tags)
+            all_links.extend(links)
+            all_events.append(serialize_event(created_event))
 
         return {
             "status": "accepted",
-            "candidate_items": [serialize_item(item, tags=tags)],
-            "profile_memory_updates": [],
-            "diary_material_enqueued": False,
-            "tags": tags,
-            "links": links,
-            "events": [serialize_event(created_event)],
+            "candidate_items": candidate_items,
+            "tags": dedupe_serialized_by_id(all_tags),
+            "links": all_links,
+            "events": all_events,
         }
 
     async def _create_chunks(self, memory_item_id: str, body: str) -> None:
@@ -110,3 +140,48 @@ class IngestionService:
                 if link:
                     links.append(serialize_link(link))
         return links
+
+
+def extract_memory_candidates(payload: IngestTurnInput) -> list[ExtractedMemoryCandidate]:
+    reason = payload.metadata.ingest_reason
+    if reason is None:
+        return []
+
+    return [
+        ExtractedMemoryCandidate(
+            item_type=memory_type_for_reason(reason),
+            title=make_title(payload.user_input),
+            body=build_turn_body(payload.user_input, payload.assistant_output),
+            tags=normalize_tags(payload.metadata.tags),
+            reason=reason,
+            evidence_source=EVIDENCE_SOURCE_BY_REASON[reason],
+        )
+    ]
+
+
+def memory_type_for_reason(reason: IngestReason) -> MemoryItemType:
+    return "note"
+
+
+def created_event_metadata(
+    payload: IngestTurnInput,
+    candidate: ExtractedMemoryCandidate,
+) -> dict[str, Any]:
+    metadata = payload.metadata.model_dump(mode="json")
+    metadata["candidate"] = {
+        "type": candidate.item_type,
+        "reason": candidate.reason,
+        "evidence_source": candidate.evidence_source,
+    }
+    return metadata
+
+
+def dedupe_serialized_by_id(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    deduped = []
+    seen = set()
+    for item in items:
+        item_id = item["id"]
+        if item_id not in seen:
+            seen.add(item_id)
+            deduped.append(item)
+    return deduped

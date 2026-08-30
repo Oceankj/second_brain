@@ -83,6 +83,7 @@ class RetrievalService:
                 {
                     "id": row["id"],
                     "type": row["type"],
+                    "ingest_reason": row["ingest_reason"],
                     "title": row["title"],
                     "body": row["body"],
                     "status": row["status"],

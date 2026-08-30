@@ -133,11 +133,11 @@ OpenAPI/Swagger 只適合未來如果要做 HTTP gateway 或 REST adapter 時另
 
 ## Scope
 
-P0 只負責三類 durable memory：
+P0 只負責三類 durable text：
 
 - `note`: 明確的知識、想法、專案筆記、可被重複引用的資訊。
 - `diary`: 時間序的日記式整理，記錄當天關注的目標、使用者的自我發現，以及根據對話內容形成的第三方觀察。
-- `profile_memory`: 穩定的使用者偏好、長期事實、常見工作方式、價值觀與限制。
+- `profile_memory`: 保留給可被 retrieval 的 profile-derived memory；canonical user profile 本身由獨立 Markdown profile 維護。
 
 暫時不把 `recent chat` 當作本系統的核心資料庫。近期對話脈絡通常由外層 runtime 自己管理。未來如果需要 audit trail，可以另外加入 raw `conversation_events`，但不讓它成為主要 retrieval 來源。
 
@@ -146,7 +146,7 @@ P0 只負責三類 durable memory：
 P0 先實作 tools：
 
 - `get_context`: 根據目前任務輸入搜尋 durable memory，回傳 compact context bundle。
-- `ingest_turn`: 把一次 interaction 轉成候選 memory，並處理 tags、links、profile/diary material。
+- `ingest_turn`: 把一次 interaction 轉成候選 memory，並處理 `ingest_reason`、tags 與 links。
 
 P0 schema 也會記錄 `memory_item_events`。這是 hot/cold memory 的 raw event log；分數與 ranking 演算法可以之後再從 log 重算。
 
@@ -188,16 +188,24 @@ MVP 允許的 `ingest_reason`：
 - `explicit_memory_request`
 - `user_preference`
 - `stable_fact`
+- `personal_insight`
 - `decision`
 - `stable_artifact`
 - `manual_import`
 
+P0 使用 deterministic routing：`ingest_turn` 不推論 reason，而是信任 caller 提供的 `metadata.ingest_reason`。目前所有 accepted turns 都先建立 `note` candidate，並把 `ingest_reason` 寫在 `memory_items` 上。Daily maintenance 再依 reason 分工：
+
+- 整理 notes：讀取當天 `status=candidate` 且 `ingest_reason in stable_fact / personal_insight` 的 items。
+- 生成 daily note：讀取當天所有 memory items。
+- 更新 profile：讀取當天 `status=candidate` 且 `ingest_reason=user_preference` 的 items，更新 canonical profile 的 system-observed 區，並把已採用的 candidates archived。
+
 `get_context` 會用 `max_context_chars` 對 `compact_context` 做 server-side hard budget，避免外層 agent 一次拿太多 memory 塞進 prompt。預設是 6000 chars。
 
-每天結束、準備關掉 app、或 app init 時發現有日期缺少 summary，就執行 daily tasks：
+每天結束、準備關掉 app、或 app init 時發現有日期缺少 summary，就可以分別執行 daily tasks：
 
-- update notes
-- create diary
+- review notes
+- create daily note / diary
+- update profile
 - normalize tags
 - repair / update links
 

@@ -77,19 +77,26 @@ personal_agent_memory/
 
 1. Evaluates the ingest policy from `metadata.ingest_reason` / `skip_memory`.
 2. Returns `status=skipped` without writes when the turn is not durable memory.
-3. Builds a durable memory body from user input and assistant output.
-4. Creates a `memory_items` row with `type = note` and `status = candidate`.
-5. Splits the body into chunks.
-6. Embeds every chunk.
-7. Inserts `memory_chunks`.
-8. Normalizes metadata tags and upserts `tags`.
-9. Inserts `memory_item_tags`.
-10. Detects `[[wikilinks]]` in the body.
-11. Resolves matching titles and inserts `memory_links`.
-12. Inserts a `created` event into `memory_item_events`.
-13. Returns an `ingest_turn.output` shaped response.
+3. Extracts memory candidates with deterministic reason-based routing.
+4. Builds a durable memory body from user input and assistant output.
+5. Creates `memory_items` rows with `status = candidate`.
+   - `ingest_turn` does not infer `ingest_reason`; the caller must provide it.
+   - All accepted turns currently create `note` candidates.
+   - `ingest_reason` is stored on `memory_items` so daily maintenance can route
+     candidates into note review, daily note generation, or profile update tasks.
+6. Splits each body into chunks.
+7. Embeds every chunk.
+8. Inserts `memory_chunks`.
+9. Normalizes metadata tags and upserts `tags`.
+10. Inserts `memory_item_tags`.
+11. Detects `[[wikilinks]]` in each body.
+12. Resolves matching titles and inserts `memory_links`.
+13. Inserts a `created` event into `memory_item_events` with candidate provenance.
+14. Returns an `ingest_turn.output` shaped response.
 
-The current extraction strategy is intentionally simple: one interaction becomes one candidate note. Later, this can become LLM-assisted extraction without changing the MCP tool boundary.
+The current extraction strategy is intentionally simple: one interaction becomes one
+candidate note with a caller-provided `ingest_reason`. Later, this can become rule-based
+or LLM-assisted extraction without changing the MCP tool boundary.
 
 ### `get_context`
 

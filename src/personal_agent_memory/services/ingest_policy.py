@@ -23,8 +23,8 @@ def evaluate_ingest_policy(metadata: IngestTurnMetadata) -> IngestPolicyDecision
             should_ingest=False,
             reason=(
                 "metadata.ingest_reason is required; use one of task_completed, "
-                "explicit_memory_request, user_preference, stable_fact, decision, "
-                "stable_artifact, manual_import"
+                "explicit_memory_request, user_preference, stable_fact, "
+                "personal_insight, decision, stable_artifact, manual_import"
             ),
         )
 

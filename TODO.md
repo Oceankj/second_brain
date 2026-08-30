@@ -33,6 +33,11 @@ P1 是 P0 跑通之後要優先處理的項目。它們會直接改善 retrieval
 - consolidation 後將 candidate notes 標記為 `active`。
 - 封存過期或被取代的 notes。
 
+### Ingestion Extraction
+
+- Level 2: 在 deterministic routing 跑穩後，加入 lightweight extraction，用規則從 interaction 抽 title、tags、wikilinks 與 source metadata。
+- Level 2 仍避免引入 model；只做可預期、可測試的轉換，例如根據 `ingest_reason`、metadata tags、明確 `[[wikilink]]`、標題模式與簡單關鍵字補強 candidate memory。
+
 ### Schema 延伸
 
 - 在 `memory_items` 加上 `summary`，用於快速預覽與 retrieval reranking。
@@ -93,6 +98,12 @@ create table memory_item_stats (
 - 回傳 memory context 時加入 source / provenance snippets。
 - 設計 ranking formula，結合 semantic score、diary context boost、tag match boost、typed link boost、heat boost、importance boost 與 staleness penalty。
 - 更新 memory heat：decay 舊的 `heat_score`、加入近期 usage signals、boost 被近期 diary 連到的 notes，並讓近期沒有使用的 notes cooling。
+
+### Model-based Ingestion Extraction
+
+- Level 3: 在 deterministic routing 與 lightweight extraction 都穩定後，才引入 model-based extraction，從一輪 interaction 抽出 1-N 個乾淨的 memory candidates。
+- Model-based extraction 應輸出結構化 candidates：`type`、`title`、`body`、`tags`、`reason`、`confidence` 與 evidence snippets，並且通過 schema validation 後才寫入。
+- 保留 deterministic routing 作為 fallback；model 只負責提升品質，不應成為 `ingest_turn` 能否基本運作的前提。
 
 ## 待重新討論的問題
 

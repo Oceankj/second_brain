@@ -12,6 +12,7 @@ def serialize_item(
     return {
         "id": item["id"],
         "type": item["type"],
+        "ingest_reason": item.get("ingest_reason"),
         "title": item["title"],
         "body": item["body"],
         "status": item["status"],

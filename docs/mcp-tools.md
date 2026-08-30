@@ -65,7 +65,7 @@ Output schema:
 
 ## ingest_turn
 
-把一次 interaction 轉成可保存的 memory source，再由系統判斷是否建立 note、diary material 或更新 profile memory。
+把一次 interaction 轉成可保存的 memory source，建立帶有 `ingest_reason` 的 candidate memory item。
 
 ```text
 ingest_turn(user_input, assistant_output, metadata)
@@ -74,14 +74,13 @@ ingest_turn(user_input, assistant_output, metadata)
   -> extract candidate memories
   -> normalize tags
   -> create candidate memory_items
+  -> store caller-provided ingest_reason on memory_items
   -> create memory_chunks and embeddings
   -> find or create tags
   -> create memory_item_tags
   -> detect links
   -> create memory_links
-  -> log created / linked / diary mention events
-  -> update profile_memory when stable
-  -> enqueue diary material
+  -> log created / linked events
 ```
 
 Input schema:
@@ -97,10 +96,13 @@ Output schema:
 - Memory source 是完整 interaction，不只是 assistant output。
 - P0 要求 caller 提供 `metadata.ingest_reason`，避免每輪 raw output 都無腦寫入 durable memory。
 - 若 `metadata.skip_memory=true`，或缺少 `metadata.ingest_reason`，`ingest_turn` 會回傳 `status=skipped` 並且不寫 DB。
-- 允許的 `ingest_reason` 是 `task_completed`、`explicit_memory_request`、`user_preference`、`stable_fact`、`decision`、`stable_artifact`、`manual_import`。
+- 允許的 `ingest_reason` 是 `task_completed`、`explicit_memory_request`、`user_preference`、`stable_fact`、`personal_insight`、`decision`、`stable_artifact`、`manual_import`。
+- P0 使用 deterministic routing：`ingest_turn` 不推論 reason；caller 提供 `metadata.ingest_reason` 後，server 將它寫入 `memory_items.ingest_reason`。
+- 目前所有 accepted turns 都先建立 `note` candidate。`user_preference`、`stable_fact`、`personal_insight` 的後續用途由 daily maintenance tasks 根據 `ingest_reason` 判斷。
+- `personal_insight` 表示使用者對自身思考、工作方式、需求或狀態的自我觀察；P0 先作為帶時間脈絡的 `note` candidate。
 - P0 可以先產生 `candidate` memory item，不急著在主流程合併到既有 note。
-- Profile memory 只有在 evidence 足夠穩定時才更新。
-- Diary material 可以先進入每日整理佇列，由 daily maintenance 建立 diary entry。
+- Canonical profile 不由 `ingest_turn` 直接更新；profile update task 會讀取當天 `status=candidate` 且 `ingest_reason=user_preference` 的 items，採用後再把 raw candidates archived。
+- Daily diary 不依賴 enqueue queue；daily maintenance 直接讀取指定日期產生的 `memory_items` 與 `created` events，作為建立 diary entry 的素材。
 
 ### Side Effects
 
@@ -113,7 +115,7 @@ Output schema:
 - `memory_links`
 - `memory_item_events`
 
-也可能 enqueue diary material，或建立/更新 `profile_memory`。
+不直接建立或更新 canonical profile。
 
 ### Example Call
 

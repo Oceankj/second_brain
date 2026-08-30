@@ -72,34 +72,19 @@ flowchart TD
   noteCandidate --> detectLinks["Detect wikilinks or suggested references"]
   detectLinks --> saveLinks["Insert memory_links"]
 
-  extract --> stableProfile{"Stable profile signal?"}
-  stableProfile -- "Yes" --> updateProfile["Create or update profile_memory"]
-  stableProfile -- "No" --> skipProfile["Keep as note or diary material"]
-
-  source --> enqueueDiary["Enqueue diary material"]
-
   saveChunks --> done["Turn ingestion complete"]
   itemTags --> done
   saveLinks --> done
-  saveLinks --> logWriteEvents["Insert created, linked, or diary mention events"]
+  saveLinks --> logWriteEvents["Insert created or linked events"]
   logWriteEvents --> done
-  updateProfile --> done
-  skipProfile --> done
-  enqueueDiary --> done
 ```
 
-## Daily Maintenance Lifecycle
+## Daily Notes Review Lifecycle
 
 ```mermaid
 flowchart TD
-  trigger{"Daily task trigger"}
-  trigger --> endOfDay["End of day"]
-  trigger --> appClose["Before app close"]
-  trigger --> appInit["App init finds missing summary"]
-
-  endOfDay --> collect["Collect today's interactions and candidate notes"]
-  appClose --> collect
-  appInit --> collect
+  trigger{"Daily notes review trigger"}
+  trigger --> collect["Load today's candidate memory_items where ingest_reason is stable_fact or personal_insight"]
 
   collect --> updateNotes["Update notes"]
   updateNotes --> findSimilar["Find similar notes by tags, links, embedding, title, body"]
@@ -113,11 +98,32 @@ flowchart TD
   keep --> repairLinks
 
   repairLinks --> normalize["Normalize tags"]
-  normalize --> diary["Create daily diary entry"]
-  diary --> diaryLinks["Link diary to important notes"]
-  diaryLinks --> activate["Mark reviewed candidates as active"]
+  normalize --> activate["Mark reviewed notes as active"]
   activate --> archive["Archive stale or superseded items when appropriate"]
-  archive --> done["Daily maintenance complete"]
+  archive --> done["Daily notes review complete"]
+```
+
+## Daily Note Creation Lifecycle
+
+```mermaid
+flowchart TD
+  trigger{"Daily note trigger"}
+  trigger --> collect["Load today's memory_items and created events"]
+  collect --> diary["Create daily note / diary entry"]
+  diary --> diaryLinks["Link diary to important memory_items"]
+  diaryLinks --> diaryEvents["Insert mentioned_in_diary events"]
+  diaryEvents --> done["Daily note creation complete"]
+```
+
+## Profile Update Lifecycle
+
+```mermaid
+flowchart TD
+  trigger{"Profile update trigger"}
+  trigger --> collect["Load today's candidate memory_items where ingest_reason is user_preference"]
+  collect --> updateProfile["Update canonical profile system-observed section"]
+  updateProfile --> archive["Archive consumed user_preference candidates"]
+  archive --> done["Profile update complete"]
 ```
 
 ## Memory Item Status

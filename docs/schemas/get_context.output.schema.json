@@ -50,6 +50,19 @@
       "type": "string",
       "enum": ["candidate", "active", "archived"]
     },
+    "ingest_reason": {
+      "type": "string",
+      "enum": [
+        "task_completed",
+        "explicit_memory_request",
+        "user_preference",
+        "stable_fact",
+        "personal_insight",
+        "decision",
+        "stable_artifact",
+        "manual_import"
+      ]
+    },
     "memory_link_type": {
       "type": "string",
       "enum": ["references"]
@@ -120,6 +133,16 @@
         },
         "type": {
           "$ref": "#/$defs/memory_item_type"
+        },
+        "ingest_reason": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ingest_reason"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "title": {
           "type": "string"

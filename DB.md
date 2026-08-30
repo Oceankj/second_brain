@@ -39,6 +39,7 @@ create type memory_item_status as enum (
 create table memory_items (
   id uuid primary key default gen_random_uuid(),
   type memory_item_type not null,
+  ingest_reason text,
   title text not null,
   body text not null,
   status memory_item_status not null default 'candidate',
@@ -51,6 +52,7 @@ create table memory_items (
 ### 欄位說明
 
 - `type`: 區分 `note`、`diary`、`profile_memory`。
+- `ingest_reason`: 外層 caller 給的寫入理由，例如 `user_preference`、`stable_fact`、`personal_insight`。Daily maintenance 用它決定候選 item 要被哪個 task 消費。
 - `status`: 一開始是 `candidate`；經過 review 或 daily consolidation 後變成 `active`。
 - `event_date`: 主要給 diary entries 使用。一般 notes 與 profile memories 可以是 null。
 - `body`: 儲存這個 memory item 的 canonical full text。
@@ -223,13 +225,14 @@ Tags 是有用的 retrieval references，但一般 context retrieval 不一定�
 典型 memory ingestion 流程：
 
 1. 建立 `memory_items` row，並設 `status = 'candidate'`。
-2. 將 `body` 切成 `memory_chunks`。
-3. 替每個 chunk 產生 embeddings。
-4. 找到或建立 normalized tags。
-5. 寫入 `memory_item_tags`。
-6. 偵測明確的 `[[wikilinks]]` 或 model-suggested references。
-7. 寫入 `memory_links`。
-8. 視情況寫入 `created`、`linked_from_new_note` 或 `mentioned_in_diary` events。
+2. 寫入 `ingest_reason`，保留 caller 為什麼要求 durable memory 的明確理由。
+3. 將 `body` 切成 `memory_chunks`。
+4. 替每個 chunk 產生 embeddings。
+5. 找到或建立 normalized tags。
+6. 寫入 `memory_item_tags`。
+7. 偵測明確的 `[[wikilinks]]` 或 model-suggested references。
+8. 寫入 `memory_links`。
+9. 視情況寫入 `created` 或 `linked_from_new_note` events。`mentioned_in_diary` 由 daily maintenance 建立 diary entry 時寫入。
 
 ## Indexes
 
@@ -239,6 +242,8 @@ P0 應該包含常見 retrieval paths 需要的 indexes。
 create index memory_items_type_idx on memory_items(type);
 create index memory_items_status_idx on memory_items(status);
 create index memory_items_event_date_idx on memory_items(event_date);
+create index memory_items_ingest_reason_idx on memory_items(ingest_reason);
+create index memory_items_created_at_idx on memory_items(created_at);
 
 create index memory_chunks_item_idx on memory_chunks(memory_item_id);
 create index memory_links_source_idx on memory_links(source_id);

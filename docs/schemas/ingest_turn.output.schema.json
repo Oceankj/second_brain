@@ -4,7 +4,7 @@
   "title": "ingest_turn output",
   "type": "object",
   "additionalProperties": false,
-  "required": ["status", "candidate_items", "diary_material_enqueued"],
+  "required": ["status", "candidate_items"],
   "properties": {
     "status": {
       "type": "string",
@@ -19,15 +19,6 @@
       "items": {
         "$ref": "#/$defs/memory_item"
       }
-    },
-    "profile_memory_updates": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/memory_item"
-      }
-    },
-    "diary_material_enqueued": {
-      "type": "boolean"
     },
     "tags": {
       "type": "array",
@@ -57,6 +48,19 @@
     "memory_item_status": {
       "type": "string",
       "enum": ["candidate", "active", "archived"]
+    },
+    "ingest_reason": {
+      "type": "string",
+      "enum": [
+        "task_completed",
+        "explicit_memory_request",
+        "user_preference",
+        "stable_fact",
+        "personal_insight",
+        "decision",
+        "stable_artifact",
+        "manual_import"
+      ]
     },
     "memory_link_type": {
       "type": "string",
@@ -88,6 +92,16 @@
         },
         "type": {
           "$ref": "#/$defs/memory_item_type"
+        },
+        "ingest_reason": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ingest_reason"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "title": {
           "type": "string"

@@ -60,6 +60,7 @@ end $$;
 create table if not exists memory_items (
   id uuid primary key default gen_random_uuid(),
   type memory_item_type not null,
+  ingest_reason text,
   title text not null,
   body text not null,
   status memory_item_status not null default 'candidate',
@@ -67,6 +68,9 @@ create table if not exists memory_items (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table if exists memory_items
+add column if not exists ingest_reason text;
 
 create table if not exists memory_chunks (
   id uuid primary key default gen_random_uuid(),
@@ -141,6 +145,8 @@ for each row execute function set_updated_at();
 create index if not exists memory_items_type_idx on memory_items(type);
 create index if not exists memory_items_status_idx on memory_items(status);
 create index if not exists memory_items_event_date_idx on memory_items(event_date);
+create index if not exists memory_items_ingest_reason_idx on memory_items(ingest_reason);
+create index if not exists memory_items_created_at_idx on memory_items(created_at);
 
 create index if not exists memory_chunks_item_idx on memory_chunks(memory_item_id);
 create index if not exists memory_links_source_idx on memory_links(source_id);

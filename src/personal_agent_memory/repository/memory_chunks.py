@@ -46,6 +46,7 @@ class MemoryChunksRepository:
                 select
                   mi.id::text as id,
                   mi.type::text as type,
+                  mi.ingest_reason,
                   mi.title,
                   mi.body,
                   mi.status::text as status,

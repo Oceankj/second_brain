@@ -13,6 +13,7 @@ IngestReason = Literal[
     "explicit_memory_request",
     "user_preference",
     "stable_fact",
+    "personal_insight",
     "decision",
     "stable_artifact",
     "manual_import",

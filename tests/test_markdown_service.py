@@ -8,6 +8,7 @@ def test_item_to_markdown_renders_front_matter_and_body() -> None:
     item = {
         "id": "item-1",
         "type": "note",
+        "ingest_reason": "stable_artifact",
         "title": "Markdown service",
         "body": "Use Markdown as a portable memory format.",
         "status": "active",
@@ -20,6 +21,7 @@ def test_item_to_markdown_renders_front_matter_and_body() -> None:
     markdown = service.item_to_markdown(item)
 
     assert 'type: "note"' in markdown
+    assert 'ingest_reason: "stable_artifact"' in markdown
     assert 'title: "Markdown service"' in markdown
     assert 'event_date: "2026-08-18"' in markdown
     assert 'tags: ["memory-io"]' in markdown
@@ -31,6 +33,7 @@ def test_markdown_to_item_parses_front_matter() -> None:
     markdown = """---
 type: "diary"
 title: "Daily notes"
+ingest_reason: "manual_import"
 status: "active"
 event_date: "2026-08-18"
 tags: ["Daily", "daily", "Codex Work"]
@@ -43,6 +46,7 @@ Worked on [[Markdown service]].
     item = service.markdown_to_item(markdown)
 
     assert item.item_type == "diary"
+    assert item.ingest_reason == "manual_import"
     assert item.title == "Daily notes"
     assert item.status == "active"
     assert item.event_date == "2026-08-18"
@@ -55,6 +59,7 @@ Worked on [[Markdown service]].
         "body": "Worked on [[Markdown service]].",
         "status": "active",
         "event_date": "2026-08-18",
+        "ingest_reason": "manual_import",
     }
 
 

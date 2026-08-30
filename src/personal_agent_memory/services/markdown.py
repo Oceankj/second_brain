@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from personal_agent_memory.tool_schemas import (
+    IngestReason,
     MemoryItemStatus,
     MemoryItemType,
     json_date,
@@ -19,6 +20,7 @@ KNOWN_FRONT_MATTER_KEYS = {
     "id",
     "type",
     "title",
+    "ingest_reason",
     "status",
     "event_date",
     "tags",
@@ -32,6 +34,7 @@ class MarkdownMemoryItem:
     item_type: MemoryItemType
     title: str
     body: str
+    ingest_reason: IngestReason | None = None
     status: MemoryItemStatus = "candidate"
     event_date: str | None = None
     tags: list[str] = field(default_factory=list)
@@ -62,6 +65,7 @@ class MarkdownMemoryItem:
             "body": self.body,
             "status": self.status,
             "event_date": self.event_date,
+            "ingest_reason": self.ingest_reason,
         }
 
 
@@ -77,6 +81,7 @@ class MarkdownService:
         front_matter = {
             "type": item["type"],
             "title": item["title"],
+            "ingest_reason": item.get("ingest_reason"),
             "status": item.get("status", "candidate"),
             "event_date": json_date(item.get("event_date")),
             "tags": tag_names(tags if tags is not None else item.get("tags", [])),
@@ -97,6 +102,7 @@ class MarkdownService:
         front_matter, body = split_front_matter(markdown)
         title = coerce_non_empty_string(front_matter.get("title")) or infer_title(body)
         item_type = coerce_memory_item_type(front_matter.get("type"), default_type)
+        ingest_reason = coerce_ingest_reason(front_matter.get("ingest_reason"))
         status = coerce_memory_item_status(front_matter.get("status"), default_status)
         event_date = coerce_optional_string(front_matter.get("event_date"))
 
@@ -105,6 +111,7 @@ class MarkdownService:
             item_type=item_type,
             title=title,
             body=body.strip("\n"),
+            ingest_reason=ingest_reason,
             status=status,
             event_date=event_date,
             tags=normalize_tags(coerce_tags(front_matter.get("tags"))),
@@ -209,6 +216,23 @@ def coerce_memory_item_type(value: Any, default: MemoryItemType) -> MemoryItemTy
     if value is None:
         return default
     raise ValueError(f"Unsupported memory item type: {value}")
+
+
+def coerce_ingest_reason(value: Any) -> IngestReason | None:
+    if value in {
+        "task_completed",
+        "explicit_memory_request",
+        "user_preference",
+        "stable_fact",
+        "personal_insight",
+        "decision",
+        "stable_artifact",
+        "manual_import",
+    }:
+        return value
+    if value is None:
+        return None
+    raise ValueError(f"Unsupported ingest reason: {value}")
 
 
 def coerce_memory_item_status(value: Any, default: MemoryItemStatus) -> MemoryItemStatus:
