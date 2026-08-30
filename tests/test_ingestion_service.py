@@ -60,7 +60,12 @@ class FakeMemoryChunks:
 
 
 class FakeTags:
-    async def upsert(self, name: str, description: str | None = None) -> dict[str, Any]:
+    async def upsert(
+        self,
+        name: str,
+        description: str | None = None,
+        embedding: list[float] | None = None,
+    ) -> dict[str, Any]:
         return {
             "id": f"tag-{name}",
             "name": name,

@@ -47,6 +47,12 @@ MEMORY_EMBEDDING_DIMENSION=1024
   "chunking": {
     "max_chars": 1800,
     "overlap_chars": 200
+  },
+  "retrieval": {
+    "recent_diary_lookback_days": 2,
+    "recent_diary_max_items": 3,
+    "recent_diary_min_score": 0.72,
+    "recent_diary_max_chars": 2000
   }
 }
 ```

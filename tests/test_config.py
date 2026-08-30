@@ -12,6 +12,15 @@ def test_load_memory_config_reads_repo_local_json(tmp_path: Path) -> None:
   "chunking": {
     "max_chars": 2400,
     "overlap_chars": 240
+  },
+  "retrieval": {
+    "recent_diary_lookback_days": 4,
+    "recent_diary_max_items": 5,
+    "recent_diary_min_score": 0.8,
+    "recent_diary_max_chars": 3000,
+    "tag_retrieval_min_score": 0.81,
+    "tag_retrieval_max_tags": 7,
+    "tag_retrieval_tag_weight": 0.35
   }
 }
 """
@@ -21,7 +30,16 @@ def test_load_memory_config_reads_repo_local_json(tmp_path: Path) -> None:
         "chunking": {
             "max_chars": 2400,
             "overlap_chars": 240,
-        }
+        },
+        "retrieval": {
+            "recent_diary_lookback_days": 4,
+            "recent_diary_max_items": 5,
+            "recent_diary_min_score": 0.8,
+            "recent_diary_max_chars": 3000,
+            "tag_retrieval_min_score": 0.81,
+            "tag_retrieval_max_tags": 7,
+            "tag_retrieval_tag_weight": 0.35,
+        },
     }
 
 
@@ -38,6 +56,15 @@ def test_load_settings_uses_memory_json_for_chunking(
   "chunking": {
     "max_chars": 2400,
     "overlap_chars": 240
+  },
+  "retrieval": {
+    "recent_diary_lookback_days": 4,
+    "recent_diary_max_items": 5,
+    "recent_diary_min_score": 0.8,
+    "recent_diary_max_chars": 3000,
+    "tag_retrieval_min_score": 0.81,
+    "tag_retrieval_max_tags": 7,
+    "tag_retrieval_tag_weight": 0.35
   }
 }
 """
@@ -47,6 +74,13 @@ def test_load_settings_uses_memory_json_for_chunking(
 
     assert settings.max_chunk_chars == 2400
     assert settings.chunk_overlap_chars == 240
+    assert settings.recent_diary_lookback_days == 4
+    assert settings.recent_diary_max_items == 5
+    assert settings.recent_diary_min_score == 0.8
+    assert settings.recent_diary_max_chars == 3000
+    assert settings.tag_retrieval_min_score == 0.81
+    assert settings.tag_retrieval_max_tags == 7
+    assert settings.tag_retrieval_tag_weight == 0.35
 
 
 def test_load_settings_does_not_read_chunking_from_env(
@@ -62,6 +96,13 @@ def test_load_settings_does_not_read_chunking_from_env(
 
     assert settings.max_chunk_chars == 1800
     assert settings.chunk_overlap_chars == 200
+    assert settings.recent_diary_lookback_days == 2
+    assert settings.recent_diary_max_items == 3
+    assert settings.recent_diary_min_score == 0.72
+    assert settings.recent_diary_max_chars == 2000
+    assert settings.tag_retrieval_min_score == 0.72
+    assert settings.tag_retrieval_max_tags == 5
+    assert settings.tag_retrieval_tag_weight == 0.4
 
 
 def test_settings_rejects_invalid_chunk_overlap() -> None:
@@ -70,4 +111,28 @@ def test_settings_rejects_invalid_chunk_overlap() -> None:
             database_url="postgresql://example",
             max_chunk_chars=100,
             chunk_overlap_chars=100,
+        )
+
+
+def test_settings_rejects_invalid_recent_diary_lookback_days() -> None:
+    with pytest.raises(ValueError, match="recent_diary_lookback_days"):
+        Settings(
+            database_url="postgresql://example",
+            recent_diary_lookback_days=8,
+        )
+
+
+def test_settings_rejects_invalid_recent_diary_min_score() -> None:
+    with pytest.raises(ValueError, match="recent_diary_min_score"):
+        Settings(
+            database_url="postgresql://example",
+            recent_diary_min_score=1.1,
+        )
+
+
+def test_settings_rejects_invalid_tag_retrieval_weight() -> None:
+    with pytest.raises(ValueError, match="tag_retrieval_tag_weight"):
+        Settings(
+            database_url="postgresql://example",
+            tag_retrieval_tag_weight=1.1,
         )

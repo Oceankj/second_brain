@@ -133,7 +133,8 @@ class IngestionService:
     async def _attach_tags(self, memory_item_id: str, raw_tags: list[str]) -> list[dict[str, Any]]:
         tags = []
         for tag_name in normalize_tags(raw_tags):
-            tag = await self.repository.tags.upsert(tag_name)
+            embedding = await self.embedding_provider.embed_text(tag_name)
+            tag = await self.repository.tags.upsert(tag_name, embedding=embedding)
             await self.repository.memory_item_tags.attach(memory_item_id, tag["id"])
             tags.append(serialize_tag(tag))
         return tags

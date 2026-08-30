@@ -36,6 +36,13 @@
         "$ref": "#/$defs/memory_item_type"
       }
     },
+    "recent_diaries": {
+      "type": "array",
+      "description": "Recent diary items that passed embedding-based relevance and were merged into the retrieval query.",
+      "items": {
+        "$ref": "#/$defs/context_memory_item"
+      }
+    },
     "generated_at": {
       "type": "string",
       "format": "date-time"

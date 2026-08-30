@@ -105,17 +105,18 @@ or LLM-assisted extraction without changing the MCP tool boundary.
 `MemoryService` delegates to `RetrievalService.get_context`, which then:
 
 1. Embeds the caller input.
-2. Searches `memory_chunks` with pgvector cosine distance.
-3. Joins matching chunks back to `memory_items`.
-4. Deduplicates by memory item.
-5. Sorts by best chunk score.
-6. Writes `retrieved` events for returned items.
-7. Optionally loads outgoing links and backlinks.
-8. Builds `compact_context`.
-9. Truncates `compact_context` to `max_context_chars`.
-10. Returns a `get_context.output` shaped response.
+2. Searches recent diary chunks and merges relevant diary context into the retrieval query.
+3. Searches `memory_chunks` with pgvector cosine distance.
+4. Searches similar `tags.embedding` rows, loads tagged chunks, and scores them with the configured tag/chunk weight.
+5. Joins matching chunks back to `memory_items`.
+6. Deduplicates by memory item.
+7. Sorts by best candidate score.
+8. Writes `retrieved` events for returned items.
+9. Optionally loads outgoing links and backlinks.
+10. Builds and truncates `compact_context` to `max_context_chars`.
+11. Returns a `get_context.output` shaped response.
 
-The current version does not yet implement recent diary relevance, tag candidate boosting, typed link expansion, full-text search, or reranking. Those belong after the P0 write/read path is proven.
+The current version does not yet implement typed link expansion, full-text search, or reranking. Those belong after the P0 write/read path is proven.
 
 ## Boundaries
 

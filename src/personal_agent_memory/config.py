@@ -17,6 +17,13 @@ class Settings:
     ollama_timeout_seconds: float = 30.0
     max_chunk_chars: int = 1800
     chunk_overlap_chars: int = 200
+    recent_diary_lookback_days: int = 2
+    recent_diary_max_items: int = 3
+    recent_diary_min_score: float = 0.72
+    recent_diary_max_chars: int = 2000
+    tag_retrieval_min_score: float = 0.72
+    tag_retrieval_max_tags: int = 5
+    tag_retrieval_tag_weight: float = 0.4
 
     def __post_init__(self) -> None:
         if self.max_chunk_chars <= 0:
@@ -25,6 +32,20 @@ class Settings:
             raise ValueError("chunk_overlap_chars cannot be negative")
         if self.chunk_overlap_chars >= self.max_chunk_chars:
             raise ValueError("chunk_overlap_chars must be smaller than max_chunk_chars")
+        if not 0 <= self.recent_diary_lookback_days <= 7:
+            raise ValueError("recent_diary_lookback_days must be between 0 and 7")
+        if self.recent_diary_max_items < 0:
+            raise ValueError("recent_diary_max_items cannot be negative")
+        if not 0 <= self.recent_diary_min_score <= 1:
+            raise ValueError("recent_diary_min_score must be between 0 and 1")
+        if self.recent_diary_max_chars < 0:
+            raise ValueError("recent_diary_max_chars cannot be negative")
+        if not 0 <= self.tag_retrieval_min_score <= 1:
+            raise ValueError("tag_retrieval_min_score must be between 0 and 1")
+        if self.tag_retrieval_max_tags < 0:
+            raise ValueError("tag_retrieval_max_tags cannot be negative")
+        if not 0 <= self.tag_retrieval_tag_weight <= 1:
+            raise ValueError("tag_retrieval_tag_weight must be between 0 and 1")
 
 
 def load_settings() -> Settings:
@@ -55,6 +76,48 @@ def load_settings() -> Settings:
             section="chunking",
             key="overlap_chars",
             default=200,
+        ),
+        recent_diary_lookback_days=config_int(
+            memory_config,
+            section="retrieval",
+            key="recent_diary_lookback_days",
+            default=2,
+        ),
+        recent_diary_max_items=config_int(
+            memory_config,
+            section="retrieval",
+            key="recent_diary_max_items",
+            default=3,
+        ),
+        recent_diary_min_score=config_float(
+            memory_config,
+            section="retrieval",
+            key="recent_diary_min_score",
+            default=0.72,
+        ),
+        recent_diary_max_chars=config_int(
+            memory_config,
+            section="retrieval",
+            key="recent_diary_max_chars",
+            default=2000,
+        ),
+        tag_retrieval_min_score=config_float(
+            memory_config,
+            section="retrieval",
+            key="tag_retrieval_min_score",
+            default=0.72,
+        ),
+        tag_retrieval_max_tags=config_int(
+            memory_config,
+            section="retrieval",
+            key="tag_retrieval_max_tags",
+            default=5,
+        ),
+        tag_retrieval_tag_weight=config_float(
+            memory_config,
+            section="retrieval",
+            key="tag_retrieval_tag_weight",
+            default=0.4,
         ),
     )
 
@@ -105,3 +168,22 @@ def config_int(
     if value is None:
         value = default
     return int(value)
+
+
+def config_float(
+    config: Mapping[str, Any],
+    *,
+    section: str,
+    key: str,
+    default: float,
+) -> float:
+    section_values = config.get(section, {})
+    if section_values is None:
+        section_values = {}
+    if not isinstance(section_values, Mapping):
+        raise ValueError(f"memory.json {section} must be an object")
+
+    value = section_values.get(key)
+    if value is None:
+        value = default
+    return float(value)

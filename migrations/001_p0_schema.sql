@@ -98,9 +98,13 @@ create table if not exists tags (
   id uuid primary key default gen_random_uuid(),
   name text not null unique,
   description text,
+  embedding vector(:embedding_dimension),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table if exists tags
+add column if not exists embedding vector(:embedding_dimension);
 
 create table if not exists memory_item_tags (
   memory_item_id uuid not null references memory_items(id) on delete cascade,

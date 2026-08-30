@@ -12,17 +12,31 @@ from personal_agent_memory.tool_schemas import GetContextInput, IngestTurnInput
 
 mcp = FastMCP("personal-agent-memory")
 _service: MemoryService | None = None
+_settings: Settings | None = None
+
+
+def get_settings() -> Settings:
+    global _settings
+    if _settings is None:
+        _settings = load_settings()
+    return _settings
 
 
 def get_service() -> MemoryService:
     global _service
     if _service is None:
-        settings = load_settings()
+        settings = get_settings()
         _service = MemoryService(
             repository=PostgresMemoryRepository(settings.database_url),
             embedding_provider=build_embedding_provider(settings),
             max_chunk_chars=settings.max_chunk_chars,
             chunk_overlap_chars=settings.chunk_overlap_chars,
+            recent_diary_max_items=settings.recent_diary_max_items,
+            recent_diary_min_score=settings.recent_diary_min_score,
+            recent_diary_max_chars=settings.recent_diary_max_chars,
+            tag_retrieval_min_score=settings.tag_retrieval_min_score,
+            tag_retrieval_max_tags=settings.tag_retrieval_max_tags,
+            tag_retrieval_tag_weight=settings.tag_retrieval_tag_weight,
         )
     return _service
 
@@ -58,7 +72,7 @@ async def get_context(
     user_id: str,
     session_id: str | None = None,
     memory_types: list[str] | None = None,
-    diary_lookback_days: int = 2,
+    diary_lookback_days: int | None = None,
     limit: int = 10,
     max_context_chars: int = 6000,
     include_links: bool = True,
@@ -67,12 +81,17 @@ async def get_context(
 ) -> dict[str, Any]:
     """Retrieve compact durable memory context for the caller input."""
 
+    settings = get_settings()
     payload = GetContextInput(
         input=input,
         user_id=user_id,
         session_id=session_id,
         memory_types=memory_types or ["note", "diary", "profile_memory"],
-        diary_lookback_days=diary_lookback_days,
+        diary_lookback_days=(
+            settings.recent_diary_lookback_days
+            if diary_lookback_days is None
+            else diary_lookback_days
+        ),
         limit=limit,
         max_context_chars=max_context_chars,
         include_links=include_links,

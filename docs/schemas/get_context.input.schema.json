@@ -29,11 +29,11 @@
       "default": ["note", "diary", "profile_memory"]
     },
     "diary_lookback_days": {
-      "type": "integer",
+      "type": ["integer", "null"],
       "minimum": 0,
       "maximum": 7,
-      "default": 2,
-      "description": "固定載入最近幾天的 diary。0 表示不載入 recent diary recency layer。"
+      "default": null,
+      "description": "固定載入最近幾天的 diary。若未提供，使用 memory.json 的 retrieval.recent_diary_lookback_days；0 表示不載入 recent diary recency layer。"
     },
     "limit": {
       "type": "integer",

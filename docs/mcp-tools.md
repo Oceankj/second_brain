@@ -32,10 +32,13 @@ Output schema:
 ### Behavior
 
 - 預設搜尋 `note`、`diary`、`profile_memory`。
-- Retrieval 會先載入最近 1-2 天的 `diary`，判斷是否與當前 input 相關。
+- Retrieval 會先用原始 input embedding 搜尋最近 N 天的 `diary` chunks，將分數達到 `memory.json` 門檻的 diary 視為 relevant。
+- 若 caller 未提供 `diary_lookback_days`，server 使用 `memory.json` 的 `retrieval.recent_diary_lookback_days` 作為預設；caller 仍可逐次 override。
 - 若 recent diary 相關，先把 diary context 併入 retrieval context，再進 semantic retrieval。
 - Semantic retrieval 以 `memory_chunks` 的 pgvector search 為主，再 join 回 `memory_items`。
-- Tags 不在一般 `get_context` output 中 attach；但 tag match 是重要 retrieval signal，可以補候選 items 或提升排名。
+- Tag retrieval 會用 retrieval query embedding 搜尋 `tags.embedding`，再從超過 `retrieval.tag_retrieval_min_score` 的 tags 載入 tagged chunks。
+- Tagged chunk score 使用 `tag_score * tag_retrieval_tag_weight + chunk_score * (1 - tag_retrieval_tag_weight)`；預設 tag 佔 0.4、chunk 佔 0.6。
+- Tags 不在一般 `get_context` output 中 attach；tag match 只作為 retrieval signal 補候選 items。
 - P0 links 只支援 `references`，可用於 candidate expansion 與 backlinks，詳見 [mcp-links.md](mcp-links.md)。
 - Recent diary、tag candidates、semantic matches 與 link-expanded candidates 需要合併、去重，再套用 status/user scope/limit。
 - 回傳內容應該是相關 durable memory context，不負責 reasoning 或 answer generation。
@@ -56,7 +59,6 @@ Output schema:
   "input": "我接下來要繼續整理 personal memory MCP 的資料模型",
   "user_id": "user-local",
   "session_id": "codex-2026-07-30",
-  "diary_lookback_days": 2,
   "link_expansion_depth": 1,
   "max_context_chars": 6000,
   "limit": 10

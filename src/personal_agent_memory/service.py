@@ -20,6 +20,12 @@ class MemoryService:
         embedding_provider: EmbeddingProvider,
         max_chunk_chars: int,
         chunk_overlap_chars: int,
+        recent_diary_max_items: int,
+        recent_diary_min_score: float,
+        recent_diary_max_chars: int,
+        tag_retrieval_min_score: float,
+        tag_retrieval_max_tags: int,
+        tag_retrieval_tag_weight: float,
     ) -> None:
         self.ingestion = IngestionService(
             repository=repository,
@@ -30,6 +36,12 @@ class MemoryService:
         self.retrieval = RetrievalService(
             repository=repository,
             embedding_provider=embedding_provider,
+            recent_diary_max_items=recent_diary_max_items,
+            recent_diary_min_score=recent_diary_min_score,
+            recent_diary_max_chars=recent_diary_max_chars,
+            tag_retrieval_min_score=tag_retrieval_min_score,
+            tag_retrieval_max_tags=tag_retrieval_max_tags,
+            tag_retrieval_tag_weight=tag_retrieval_tag_weight,
         )
         self.markdown = MarkdownService()
 

@@ -19,14 +19,14 @@ flowchart LR
 flowchart TD
   request["get_context(input, user_id, session_id?)"] --> validate["Validate request"]
   validate --> recentDiary["Load recent diary entries from last 1-2 days"]
-  recentDiary --> diaryRelevant{"Diary relevant to input?"}
+  recentDiary --> diaryRelevant{"Diary chunk score above threshold?"}
   diaryRelevant -- "Yes" --> mergeDiary["Merge input with relevant diary context"]
   diaryRelevant -- "No" --> baseContext["Use original input as retrieval context"]
 
-  mergeDiary --> tagHints["Find related tags as retrieval signals"]
-  baseContext --> tagHints
-  tagHints --> embedQuery["Create retrieval query embedding"]
-  tagHints --> tagCandidates["Load memory_items through matching tags"]
+  mergeDiary --> embedQuery["Create retrieval query embedding"]
+  baseContext --> embedQuery
+  embedQuery --> tagHints["Find related tags by embedding"]
+  tagHints --> tagCandidates["Load tagged chunks with weighted tag/chunk score"]
 
   embedQuery --> searchChunks["Search memory_chunks with pgvector"]
   searchChunks --> joinItems["Join matching memory_items"]
@@ -48,7 +48,7 @@ Notes:
 
 - Tags are not attached during normal durable context lookup.
 - Tags are still important retrieval references: matched tags can add candidate memory items or boost ranking, but they do not need to be returned.
-- Recent diary entries are checked before RAG because they carry short-term life/work context that semantic search may miss.
+- Recent diary entries are checked with embedding similarity before RAG because they carry short-term life/work context that semantic search may miss.
 - If recent diary is relevant, it becomes part of the retrieval context before semantic search.
 - P0 links only support `references`, which can affect candidate expansion and backlinks.
 - `get_context` should return relevant memory, not perform reasoning over that memory.

@@ -29,7 +29,7 @@ class GetContextInput(BaseModel):
     memory_types: list[MemoryItemType] = Field(
         default_factory=lambda: ["note", "diary", "profile_memory"]
     )
-    diary_lookback_days: int = Field(default=2, ge=0, le=7)
+    diary_lookback_days: int | None = Field(default=None, ge=0, le=7)
     limit: int = Field(default=10, ge=1, le=50)
     max_context_chars: int = Field(default=6000, ge=500, le=50000)
     include_links: bool = True
