@@ -32,6 +32,12 @@ class ExtractedMemoryCandidate:
     evidence_source: str
 
 
+@dataclass(frozen=True)
+class LinkCreationResult:
+    links: list[dict[str, Any]]
+    events: list[dict[str, Any]]
+
+
 EVIDENCE_SOURCE_BY_REASON: dict[IngestReason, str] = {
     "task_completed": "both",
     "explicit_memory_request": "both",
@@ -86,7 +92,6 @@ class IngestionService:
 
             await self._create_chunks(item["id"], candidate.body)
             tags = await self._attach_tags(item["id"], candidate.tags)
-            links = await self._create_wikilinks(item["id"], candidate.body)
             created_event = await self.repository.memory_item_events.create(
                 memory_item_id=item["id"],
                 event_type="created",
@@ -94,11 +99,17 @@ class IngestionService:
                 session_id=payload.metadata.session_id,
                 metadata=created_event_metadata(payload, candidate),
             )
+            link_result = await self._create_wikilinks(
+                source_item_id=item["id"],
+                body=candidate.body,
+                payload=payload,
+            )
 
             candidate_items.append(serialize_item(item, tags=tags))
             all_tags.extend(tags)
-            all_links.extend(links)
+            all_links.extend(link_result.links)
             all_events.append(serialize_event(created_event))
+            all_events.extend(link_result.events)
 
         return {
             "status": "accepted",
@@ -127,19 +138,38 @@ class IngestionService:
             tags.append(serialize_tag(tag))
         return tags
 
-    async def _create_wikilinks(self, memory_item_id: str, body: str) -> list[dict[str, Any]]:
+    async def _create_wikilinks(
+        self,
+        *,
+        source_item_id: str,
+        body: str,
+        payload: IngestTurnInput,
+    ) -> LinkCreationResult:
         links = []
+        events = []
         for target_title in detect_wikilinks(body):
             target = await self.repository.memory_items.find_by_title(target_title)
-            if target and target["id"] != memory_item_id:
+            if target and target["id"] != source_item_id:
                 link = await self.repository.memory_links.create(
-                    source_id=memory_item_id,
+                    source_id=source_item_id,
                     target_id=target["id"],
                     link_type="references",
                 )
                 if link:
+                    linked_event = await self.repository.memory_item_events.create(
+                        memory_item_id=target["id"],
+                        event_type="linked_from_new_note",
+                        source=payload.metadata.source,
+                        session_id=payload.metadata.session_id,
+                        metadata=linked_event_metadata(
+                            payload=payload,
+                            link=link,
+                            target_title=target_title,
+                        ),
+                    )
                     links.append(serialize_link(link))
-        return links
+                    events.append(serialize_event(linked_event))
+        return LinkCreationResult(links=links, events=events)
 
 
 def extract_memory_candidates(payload: IngestTurnInput) -> list[ExtractedMemoryCandidate]:
@@ -172,6 +202,23 @@ def created_event_metadata(
         "type": candidate.item_type,
         "reason": candidate.reason,
         "evidence_source": candidate.evidence_source,
+    }
+    return metadata
+
+
+def linked_event_metadata(
+    *,
+    payload: IngestTurnInput,
+    link: dict[str, Any],
+    target_title: str,
+) -> dict[str, Any]:
+    metadata = payload.metadata.model_dump(mode="json")
+    metadata["link"] = {
+        "id": link["id"],
+        "source_id": link["source_id"],
+        "target_id": link["target_id"],
+        "link_type": link["link_type"],
+        "target_title": target_title,
     }
     return metadata
 

@@ -103,6 +103,7 @@ Output schema:
 - P0 可以先產生 `candidate` memory item，不急著在主流程合併到既有 note。
 - Canonical profile 不由 `ingest_turn` 直接更新；profile update task 會讀取當天 `status=candidate` 且 `ingest_reason=user_preference` 的 items，採用後再把 raw candidates archived。
 - Daily diary 不依賴 enqueue queue；daily maintenance 直接讀取指定日期產生的 `memory_items` 與 `created` events，作為建立 diary entry 的素材。
+- 當 `ingest_turn` 因明確 `[[wikilink]]` 建立新的 `memory_links` 時，會在被連到的 target item 上寫入 `linked_from_new_note` event，作為 audit trail 與未來 ranking signal。
 
 ### Side Effects
 
