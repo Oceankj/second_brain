@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from personal_agent_memory.services.ingestion import (
+from personal_agent_memory.services.memory.ingestion import (
     created_event_metadata,
     extract_memory_candidates,
     memory_type_for_reason,
@@ -12,6 +12,7 @@ from personal_agent_memory.tool_schemas import IngestReason, IngestTurnInput
 
 def make_payload(ingest_reason: IngestReason) -> IngestTurnInput:
     return IngestTurnInput(
+        token="test-token",
         user_input="I realized personal insights should stay as notes first.",
         assistant_output="That keeps profile memory conservative until evidence repeats.",
         metadata={

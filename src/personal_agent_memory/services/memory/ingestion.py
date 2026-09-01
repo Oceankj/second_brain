@@ -5,8 +5,8 @@ from typing import Any
 
 from personal_agent_memory.providers.embeddings import EmbeddingProvider
 from personal_agent_memory.repository import PostgresMemoryRepository
-from personal_agent_memory.services.chunking import chunk_text
-from personal_agent_memory.services.ingest_policy import evaluate_ingest_policy
+from personal_agent_memory.services.memory.chunking import chunk_text
+from personal_agent_memory.services.memory.ingest_policy import evaluate_ingest_policy
 from personal_agent_memory.tool_schemas import IngestReason, IngestTurnInput, MemoryItemType
 from personal_agent_memory.utils.serialization import (
     serialize_event,
@@ -64,7 +64,7 @@ class IngestionService:
         self.max_chunk_chars = max_chunk_chars
         self.chunk_overlap_chars = chunk_overlap_chars
 
-    async def ingest_turn(self, payload: IngestTurnInput) -> dict[str, Any]:
+    async def ingest_turn(self, payload: IngestTurnInput, *, user_id: str) -> dict[str, Any]:
         policy_decision = evaluate_ingest_policy(payload.metadata)
         if not policy_decision.should_ingest:
             return {
@@ -83,6 +83,7 @@ class IngestionService:
 
         for candidate in extract_memory_candidates(payload):
             item = await self.repository.memory_items.create(
+                user_id=user_id,
                 item_type=candidate.item_type,
                 ingest_reason=candidate.reason,
                 title=candidate.title,
@@ -101,6 +102,7 @@ class IngestionService:
             )
             link_result = await self._create_wikilinks(
                 source_item_id=item["id"],
+                user_id=user_id,
                 body=candidate.body,
                 payload=payload,
             )
@@ -143,13 +145,14 @@ class IngestionService:
         self,
         *,
         source_item_id: str,
+        user_id: str,
         body: str,
         payload: IngestTurnInput,
     ) -> LinkCreationResult:
         links = []
         events = []
         for target_title in detect_wikilinks(body):
-            target = await self.repository.memory_items.find_by_title(target_title)
+            target = await self.repository.memory_items.find_by_title(target_title, user_id=user_id)
             if target and target["id"] != source_item_id:
                 link = await self.repository.memory_links.create(
                     source_id=source_item_id,

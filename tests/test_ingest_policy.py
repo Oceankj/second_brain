@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from personal_agent_memory.services.ingest_policy import evaluate_ingest_policy
+from personal_agent_memory.services.memory.ingest_policy import evaluate_ingest_policy
 from personal_agent_memory.tool_schemas import IngestTurnMetadata
 
 

@@ -32,6 +32,8 @@ class MemoryLinksRepository:
     async def load_for_items(
         self,
         item_ids: list[str],
+        *,
+        user_id: str,
     ) -> dict[str, dict[str, list[dict[str, Any]]]]:
         if not item_ids:
             return {}
@@ -39,19 +41,25 @@ class MemoryLinksRepository:
         async with await self._connect() as conn:
             outgoing_cursor = await conn.execute(
                 """
-                select id::text, source_id::text, target_id::text, link_type::text, created_at
-                from memory_links
-                where source_id::text = any(%s)
+                select ml.id::text, ml.source_id::text, ml.target_id::text,
+                       ml.link_type::text, ml.created_at
+                from memory_links ml
+                join memory_items target_item on target_item.id = ml.target_id
+                where ml.source_id::text = any(%s)
+                  and target_item.user_id = %s
                 """,
-                (item_ids,),
+                (item_ids, user_id),
             )
             backlink_cursor = await conn.execute(
                 """
-                select id::text, source_id::text, target_id::text, link_type::text, created_at
-                from memory_links
-                where target_id::text = any(%s)
+                select ml.id::text, ml.source_id::text, ml.target_id::text,
+                       ml.link_type::text, ml.created_at
+                from memory_links ml
+                join memory_items source_item on source_item.id = ml.source_id
+                where ml.target_id::text = any(%s)
+                  and source_item.user_id = %s
                 """,
-                (item_ids,),
+                (item_ids, user_id),
             )
 
             result = {item_id: {"outgoing_links": [], "backlinks": []} for item_id in item_ids}

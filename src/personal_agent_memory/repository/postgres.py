@@ -9,6 +9,7 @@ from personal_agent_memory.repository.memory_item_tags import MemoryItemTagsRepo
 from personal_agent_memory.repository.memory_items import MemoryItemsRepository
 from personal_agent_memory.repository.memory_links import MemoryLinksRepository
 from personal_agent_memory.repository.tags import TagsRepository
+from personal_agent_memory.repository.users import UsersRepository
 
 
 class PostgresMemoryRepository:
@@ -18,6 +19,7 @@ class PostgresMemoryRepository:
         self.memory_chunks = MemoryChunksRepository(self._connect)
         self.memory_links = MemoryLinksRepository(self._connect)
         self.tags = TagsRepository(self._connect)
+        self.users = UsersRepository(self._connect)
         self.memory_item_tags = MemoryItemTagsRepository(self._connect)
         self.memory_item_events = MemoryItemEventsRepository(self._connect)
 

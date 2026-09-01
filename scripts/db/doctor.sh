@@ -25,7 +25,7 @@ docker_compose exec -T db \
   select table_name
   from information_schema.tables
   where table_schema = 'public'
-    and (table_name like 'memory_%' or table_name = 'tags')
+    and (table_name like 'memory_%' or table_name in ('tags', 'users'))
   order by table_name;
 "
 
@@ -40,7 +40,7 @@ docker_compose exec -T db \
   select table_name, column_name, data_type, udt_name, is_nullable
   from information_schema.columns
   where table_schema = 'public'
-    and (table_name like 'memory_%' or table_name = 'tags')
+    and (table_name like 'memory_%' or table_name in ('tags', 'users'))
   order by table_name, ordinal_position;
 "
 

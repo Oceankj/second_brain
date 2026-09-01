@@ -132,11 +132,14 @@
     "context_memory_item": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "type", "title", "body", "status", "created_at", "updated_at"],
+      "required": ["id", "user_id", "type", "title", "body", "status", "created_at", "updated_at"],
       "properties": {
         "id": {
           "type": "string",
           "format": "uuid"
+        },
+        "user_id": {
+          "type": "string"
         },
         "type": {
           "$ref": "#/$defs/memory_item_type"

@@ -8,6 +8,18 @@
 create extension if not exists pgcrypto;
 create extension if not exists vector;
 
+create table if not exists users (
+  id text primary key,
+  display_name text,
+  api_token_hash text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+insert into users (id, display_name)
+values ('0', 'Default User')
+on conflict (id) do nothing;
+
 do $$
 begin
   create type memory_item_type as enum (
@@ -59,6 +71,7 @@ end $$;
 
 create table if not exists memory_items (
   id uuid primary key default gen_random_uuid(),
+  user_id text not null default '0' references users(id),
   type memory_item_type not null,
   ingest_reason text,
   title text not null,
@@ -71,6 +84,34 @@ create table if not exists memory_items (
 
 alter table if exists memory_items
 add column if not exists ingest_reason text;
+
+alter table if exists users
+add column if not exists api_token_hash text;
+
+alter table if exists memory_items
+add column if not exists user_id text;
+
+update memory_items
+set user_id = '0'
+where user_id is null;
+
+alter table if exists memory_items
+alter column user_id set default '0';
+
+alter table if exists memory_items
+alter column user_id set not null;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'memory_items_user_id_fkey'
+  ) then
+    alter table memory_items
+    add constraint memory_items_user_id_fkey foreign key (user_id) references users(id);
+  end if;
+end $$;
 
 create table if not exists memory_chunks (
   id uuid primary key default gen_random_uuid(),
@@ -146,11 +187,20 @@ create trigger tags_set_updated_at
 before update on tags
 for each row execute function set_updated_at();
 
+drop trigger if exists users_set_updated_at on users;
+create trigger users_set_updated_at
+before update on users
+for each row execute function set_updated_at();
+
 create index if not exists memory_items_type_idx on memory_items(type);
 create index if not exists memory_items_status_idx on memory_items(status);
 create index if not exists memory_items_event_date_idx on memory_items(event_date);
 create index if not exists memory_items_ingest_reason_idx on memory_items(ingest_reason);
 create index if not exists memory_items_created_at_idx on memory_items(created_at);
+create index if not exists memory_items_user_status_idx on memory_items(user_id, status);
+create unique index if not exists users_api_token_hash_idx
+on users(api_token_hash)
+where api_token_hash is not null;
 
 create index if not exists memory_chunks_item_idx on memory_chunks(memory_item_id);
 create index if not exists memory_links_source_idx on memory_links(source_id);

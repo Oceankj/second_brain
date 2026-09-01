@@ -4,17 +4,17 @@
   "title": "get_context input",
   "type": "object",
   "additionalProperties": false,
-  "required": ["input", "user_id"],
+  "required": ["input", "token"],
   "properties": {
     "input": {
       "type": "string",
       "minLength": 1,
       "description": "使用者目前輸入或外層 runtime 想查詢的任務脈絡。"
     },
-    "user_id": {
+    "token": {
       "type": "string",
       "minLength": 1,
-      "description": "使用者識別。"
+      "description": "API token used to authenticate the caller and resolve user identity."
     },
     "session_id": {
       "type": "string",

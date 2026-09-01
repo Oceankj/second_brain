@@ -35,12 +35,14 @@ cp memory.example.json memory.json
 預設使用本機 Ollama embeddings：
 
 ```dotenv
+MEMORY_REST_API_ENABLED=false
+MEMORY_DEFAULT_USER_TOKEN=replace-with-a-random-token-at-least-32-chars
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_EMBEDDING_MODEL=qwen3-embedding:0.6b
 MEMORY_EMBEDDING_DIMENSION=1024
 ```
 
-`.env` 主要保存 runtime environment 與 service connection，例如 `DATABASE_URL`、`OLLAMA_BASE_URL`、`OLLAMA_EMBEDDING_MODEL`。非 secret 的 memory 行為參數放在 `memory.json`，例如 chunking：
+`.env` 主要保存 runtime environment、service connection 與 secrets，例如 `DATABASE_URL`、`MEMORY_DEFAULT_USER_TOKEN`、`OLLAMA_BASE_URL`、`OLLAMA_EMBEDDING_MODEL`。非 secret 的 memory 行為參數放在 `memory.json`，例如 chunking：
 
 ```json
 {
@@ -52,7 +54,13 @@ MEMORY_EMBEDDING_DIMENSION=1024
     "recent_diary_lookback_days": 2,
     "recent_diary_max_items": 3,
     "recent_diary_min_score": 0.72,
-    "recent_diary_max_chars": 2000
+    "recent_diary_max_chars": 2000,
+    "tag_retrieval_min_score": 0.72,
+    "tag_retrieval_max_tags": 5,
+    "tag_retrieval_tag_weight": 0.4,
+    "link_expansion_max_items": 3,
+    "link_expansion_source_limit": 5,
+    "link_expansion_source_weight": 0.4
   }
 }
 ```
@@ -92,6 +100,14 @@ scripts/db/migrate.sh
 ```bash
 uv run personal-agent-memory
 ```
+
+啟動簡單 REST user API：
+
+```bash
+uv run personal-agent-memory-rest
+```
+
+REST API 預設關閉；需要先設定 `MEMORY_REST_API_ENABLED=true` 才會啟動。MCP tools 與 REST requests 都需要 token；MCP 使用 top-level `token` argument，REST 使用 `Authorization: Bearer <token>` 或 `X-Memory-Token` header。Token 只以 hash 形式寫入 DB。
 
 預設的 Docker Compose database URL 是：
 
@@ -177,7 +193,8 @@ Resources 與 prompts 先作為 MCP-first 設計邊界記錄；是否進入 P0 �
 
 ## FastMCP Skeleton
 
-目前實作骨架採用 Python FastMCP，入口在 `src/personal_agent_memory/server.py`。
+目前實作骨架採用 Python FastMCP，MCP adapter 入口在 `src/personal_agent_memory/server/mcp.py`。
+簡單的 user CRUD REST adapter 位於 `src/personal_agent_memory/server/restful.py`，讓 user 管理和 MCP tool transport 分開。
 
 目前 runtime 使用 `src/personal_agent_memory/providers/embeddings.py` 的 Ollama embeddings provider。測試若需要 deterministic embeddings，應在 test code 裡注入 fake provider，不走 production server 設定。
 

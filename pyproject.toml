@@ -9,10 +9,13 @@ dependencies = [
   "pgvector>=0.3,<1",
   "psycopg[binary]>=3.2,<4",
   "pydantic>=2.8,<3",
+  "starlette>=1.6,<2",
+  "uvicorn>=0.52,<1",
 ]
 
 [project.scripts]
 personal-agent-memory = "personal_agent_memory.server:main"
+personal-agent-memory-rest = "personal_agent_memory.server.restful:main"
 
 [project.optional-dependencies]
 dev = [

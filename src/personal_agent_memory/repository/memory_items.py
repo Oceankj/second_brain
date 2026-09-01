@@ -13,6 +13,7 @@ class MemoryItemsRepository:
     async def create(
         self,
         *,
+        user_id: str,
         item_type: str,
         title: str,
         body: str,
@@ -23,28 +24,31 @@ class MemoryItemsRepository:
         async with await self._connect() as conn:
             row = await conn.execute(
                 """
-                insert into memory_items (type, ingest_reason, title, body, status, event_date)
-                values (%s, %s, %s, %s, %s, %s)
-                returning id::text, type::text, ingest_reason, title, body, status::text,
+                insert into memory_items (
+                  user_id, type, ingest_reason, title, body, status, event_date
+                )
+                values (%s, %s, %s, %s, %s, %s, %s)
+                returning id::text, user_id, type::text, ingest_reason, title, body, status::text,
                           event_date, created_at, updated_at
                 """,
-                (item_type, ingest_reason, title, body, status, event_date),
+                (user_id, item_type, ingest_reason, title, body, status, event_date),
             )
             return dict(await row.fetchone())
 
-    async def find_by_title(self, title: str) -> dict[str, Any] | None:
+    async def find_by_title(self, title: str, *, user_id: str) -> dict[str, Any] | None:
         async with await self._connect() as conn:
             cursor = await conn.execute(
                 """
-                select id::text, type::text, ingest_reason, title, body, status::text,
+                select id::text, user_id, type::text, ingest_reason, title, body, status::text,
                        event_date, created_at, updated_at
                 from memory_items
                 where lower(title) = lower(%s)
+                  and user_id = %s
                   and status <> 'archived'
                 order by updated_at desc
                 limit 1
                 """,
-                (title,),
+                (title, user_id),
             )
             row = await cursor.fetchone()
             return dict(row) if row else None
@@ -56,15 +60,17 @@ class MemoryItemsRepository:
         end_at: datetime,
         statuses: list[str] | None = None,
         ingest_reasons: list[str] | None = None,
+        user_id: str | None = None,
     ) -> list[dict[str, Any]]:
         async with await self._connect() as conn:
             cursor = await conn.execute(
                 """
-                select id::text, type::text, ingest_reason, title, body, status::text,
+                select id::text, user_id, type::text, ingest_reason, title, body, status::text,
                        event_date, created_at, updated_at
                 from memory_items
                 where created_at >= %s
                   and created_at < %s
+                  and (%s::text is null or user_id = %s)
                   and (%s::text[] is null or status::text = any(%s))
                   and (%s::text[] is null or ingest_reason = any(%s))
                 order by created_at asc
@@ -72,6 +78,8 @@ class MemoryItemsRepository:
                 (
                     start_at,
                     end_at,
+                    user_id,
+                    user_id,
                     statuses,
                     statuses,
                     ingest_reasons,

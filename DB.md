@@ -6,14 +6,35 @@
 
 ## P0 Tables
 
-P0 目前聚焦在六張 tables：
+P0 目前聚焦在七張 tables：
 
+- `users`
 - `memory_items`
 - `memory_chunks`
 - `memory_links`
 - `tags`
 - `memory_item_tags`
 - `memory_item_events`
+
+## users
+
+儲存最小 user scope。P0 先支援單機/本機使用情境，預設建立 `id = '0'` 的 default user；未來如果有多使用者或多 profile，再沿用同一個欄位做隔離。
+
+```sql
+create table users (
+  id text primary key,
+  display_name text,
+  api_token_hash text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+insert into users (id, display_name)
+values ('0', 'Default User')
+on conflict (id) do nothing;
+```
+
+`api_token_hash` 儲存 token 的 SHA-256 hash，不儲存 raw token。P0 會從 `.env` 的 `MEMORY_DEFAULT_USER_TOKEN` 驗證 default user，第一次成功驗證時把 hash 寫到 `users.api_token_hash`。
 
 ## memory_items
 
@@ -38,6 +59,7 @@ create type memory_item_status as enum (
 
 create table memory_items (
   id uuid primary key default gen_random_uuid(),
+  user_id text not null default '0' references users(id),
   type memory_item_type not null,
   ingest_reason text,
   title text not null,
@@ -52,6 +74,7 @@ create table memory_items (
 ### 欄位說明
 
 - `type`: 區分 `note`、`diary`、`profile_memory`。
+- `user_id`: memory item 所屬 user。P0 預設是 `0`，retrieval 與 link expansion 都會套 user scope。
 - `ingest_reason`: 外層 caller 給的寫入理由，例如 `user_preference`、`stable_fact`、`personal_insight`。Daily maintenance 用它決定候選 item 要被哪個 task 消費。
 - `status`: 一開始是 `candidate`；經過 review 或 daily consolidation 後變成 `active`。
 - `event_date`: 主要給 diary entries 使用。一般 notes 與 profile memories 可以是 null。
@@ -137,6 +160,7 @@ create table tags (
   id uuid primary key default gen_random_uuid(),
   name text not null unique,
   description text,
+  embedding vector(:embedding_dimension),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -146,6 +170,7 @@ create table tags (
 
 - `name`: canonical tag name。
 - `description`: 定義這個 tag 的使用邊界。可以由 LLM 產生，之後再人工調整。
+- `embedding`: tag name 的 embedding，用於 tag retrieval。
 
 P0 不加 aliases。如果未來真的需要 alias handling，應該新增獨立的 `tag_aliases` table，而不是把 aliases 存成 `text[]`。
 
@@ -209,7 +234,7 @@ P0 不加 `heat_score` 或 `importance_score`。它們是 derived ranking values
 1. 根據 `event_date` 載入近期 `diary` items，通常是最近 1-2 天。
 2. 判斷這些 diary entries 是否與當前 input relevant。
 3. 如果 relevant，把 diary context merge 進 retrieval context。
-4. 找 matching tags，並把 tagged memory items 作為 retrieval candidates 或 ranking signals。
+4. 用 query embedding 找 matching tags，並把 tagged memory items 作為 retrieval candidates 或 ranking signals。
 5. 使用合併後的 retrieval context，透過 pgvector 搜尋 `memory_chunks`。
 6. 將 semantic matches join 回 `memory_items`。
 7. 根據 typed `memory_links` expansion 或 rerank candidates。
@@ -244,6 +269,10 @@ create index memory_items_status_idx on memory_items(status);
 create index memory_items_event_date_idx on memory_items(event_date);
 create index memory_items_ingest_reason_idx on memory_items(ingest_reason);
 create index memory_items_created_at_idx on memory_items(created_at);
+create index memory_items_user_status_idx on memory_items(user_id, status);
+create unique index users_api_token_hash_idx
+on users(api_token_hash)
+where api_token_hash is not null;
 
 create index memory_chunks_item_idx on memory_chunks(memory_item_id);
 create index memory_links_source_idx on memory_links(source_id);

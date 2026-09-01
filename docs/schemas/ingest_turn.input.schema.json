@@ -4,8 +4,13 @@
   "title": "ingest_turn input",
   "type": "object",
   "additionalProperties": false,
-  "required": ["user_input", "assistant_output", "metadata"],
+  "required": ["token", "user_input", "assistant_output", "metadata"],
   "properties": {
+    "token": {
+      "type": "string",
+      "minLength": 1,
+      "description": "API token used to authenticate the caller and resolve user identity."
+    },
     "user_input": {
       "type": "string",
       "minLength": 1
@@ -32,7 +37,8 @@
           "type": "string"
         },
         "user_id": {
-          "type": "string"
+          "type": "string",
+          "description": "Optional caller hint retained in metadata; persisted user identity is resolved from token."
         },
         "session_id": {
           "type": "string"

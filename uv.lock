@@ -393,6 +393,8 @@ dependencies = [
     { name = "pgvector" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic" },
+    { name = "starlette" },
+    { name = "uvicorn" },
 ]
 
 [package.optional-dependencies]
@@ -409,6 +411,8 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.8,<3" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8,<9" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12,<1" },
+    { name = "starlette", specifier = ">=1.6,<2" },
+    { name = "uvicorn", specifier = ">=0.52,<1" },
 ]
 provides-extras = ["dev"]
 

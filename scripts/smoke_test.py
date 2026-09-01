@@ -34,6 +34,10 @@ async def main() -> int:
     ollama_base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
     ollama_model = os.environ.get("OLLAMA_EMBEDDING_MODEL", "qwen3-embedding:0.6b")
     ollama_timeout = float(os.environ.get("OLLAMA_TIMEOUT_SECONDS", "30"))
+    default_user_token = os.environ.get("MEMORY_DEFAULT_USER_TOKEN")
+    if not default_user_token:
+        print("FAIL: MEMORY_DEFAULT_USER_TOKEN is not set.", file=sys.stderr)
+        return 2
 
     try:
         await check_database(database_url, expected_embedding_dimension=embedding_dimension)
@@ -43,7 +47,7 @@ async def main() -> int:
             dimension=embedding_dimension,
             timeout_seconds=ollama_timeout,
         )
-        await check_mcp_tool_calls()
+        await check_mcp_tool_calls(default_user_token)
     except RuntimeError as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
         return 1
@@ -82,6 +86,7 @@ async def check_database(database_url: str, *, expected_embedding_dimension: int
                 'memory_chunks',
                 'memory_links',
                 'tags',
+                'users',
                 'memory_item_tags',
                 'memory_item_events'
               )
@@ -92,6 +97,7 @@ async def check_database(database_url: str, *, expected_embedding_dimension: int
             "memory_chunks",
             "memory_links",
             "tags",
+            "users",
             "memory_item_tags",
             "memory_item_events",
         } - set(tables)
@@ -140,7 +146,7 @@ async def fetch_values(conn: psycopg.AsyncConnection, query: str) -> list[str]:
     return [next(iter(row.values())) for row in rows]
 
 
-async def check_mcp_tool_calls() -> None:
+async def check_mcp_tool_calls(default_user_token: str) -> None:
     env = os.environ.copy()
     python_path = env.get("PYTHONPATH")
     env["PYTHONPATH"] = str(ROOT / "src") if not python_path else f"{ROOT / 'src'}:{python_path}"
@@ -174,6 +180,7 @@ async def check_mcp_tool_calls() -> None:
                 skipped_result = await session.call_tool(
                     "ingest_turn",
                     arguments={
+                        "token": default_user_token,
                         "user_input": f"Smoke test skipped memory source {run_id}",
                         "assistant_output": (
                             "This should be skipped because it has no policy signal."
@@ -182,7 +189,6 @@ async def check_mcp_tool_calls() -> None:
                             "timestamp": datetime.now(UTC).isoformat(),
                             "source": "smoke_test",
                             "app": "scripts/smoke_test.py",
-                            "user_id": "smoke-user",
                             "session_id": f"smoke-{run_id}",
                             "tags": ["smoke-test", "mcp"],
                         },
@@ -198,6 +204,7 @@ async def check_mcp_tool_calls() -> None:
                 ingest_result = await session.call_tool(
                     "ingest_turn",
                     arguments={
+                        "token": default_user_token,
                         "user_input": f"Smoke test memory source {run_id}",
                         "assistant_output": (
                             "Smoke test assistant output for Personal Agent Memory MCP."
@@ -206,7 +213,6 @@ async def check_mcp_tool_calls() -> None:
                             "timestamp": datetime.now(UTC).isoformat(),
                             "source": "smoke_test",
                             "app": "scripts/smoke_test.py",
-                            "user_id": "smoke-user",
                             "session_id": f"smoke-{run_id}",
                             "tags": ["smoke-test", "mcp"],
                             "ingest_reason": "task_completed",
@@ -222,7 +228,7 @@ async def check_mcp_tool_calls() -> None:
                     "get_context",
                     arguments={
                         "input": f"Find the smoke test memory source {run_id}",
-                        "user_id": "smoke-user",
+                        "token": default_user_token,
                         "session_id": f"smoke-{run_id}",
                         "limit": 5,
                         "max_context_chars": 6000,

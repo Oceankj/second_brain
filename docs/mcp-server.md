@@ -41,6 +41,8 @@ P0 使用 PostgreSQL + pgvector。主要資料表見 [DB.md](../DB.md)：
 - `memory_links`
 - `tags`
 - `memory_item_tags`
+- `memory_item_events`
+- `users`
 
 ## Transport
 

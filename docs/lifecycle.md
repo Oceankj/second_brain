@@ -17,7 +17,7 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-  request["get_context(input, user_id, session_id?)"] --> validate["Validate request"]
+  request["get_context(input, token, session_id?)"] --> validate["Validate token and request"]
   validate --> recentDiary["Load recent diary entries from last 1-2 days"]
   recentDiary --> diaryRelevant{"Diary chunk score above threshold?"}
   diaryRelevant -- "Yes" --> mergeDiary["Merge input with relevant diary context"]
@@ -32,8 +32,8 @@ flowchart TD
   searchChunks --> joinItems["Join matching memory_items"]
   joinItems --> seedSet["Build initial candidate set"]
   tagCandidates --> seedSet
-  seedSet --> linkPolicy["Apply typed link expansion and ranking policy"]
-  linkPolicy --> filterItems["Deduplicate and filter by type, status, user scope, and limit"]
+  seedSet --> linkPolicy["Rank seeds, expand typed links, and rank linked candidates"]
+  linkPolicy --> filterItems["Quota-merge, deduplicate, and filter by type, status, user scope, and limit"]
   filterItems --> logRetrieval["Insert retrieved events"]
   logRetrieval --> includeLinks{"include_links?"}
 
@@ -57,7 +57,7 @@ Notes:
 
 ```mermaid
 flowchart TD
-  ingest["ingest_turn(user_input, assistant_output, metadata)"] --> source["Build memory source"]
+  ingest["ingest_turn(token, user_input, assistant_output, metadata)"] --> source["Validate token and build memory source"]
   source --> extract["Extract candidate memories"]
   extract --> normalizeTags["Normalize candidate tags"]
 
@@ -145,7 +145,7 @@ sequenceDiagram
   participant MCP as Memory MCP
   participant DB as PostgreSQL + pgvector
 
-  Caller->>MCP: get_context(input, user_id, session_id?)
+  Caller->>MCP: get_context(input, token, session_id?)
   MCP->>DB: load recent diary entries by event_date
   DB-->>MCP: recent diary candidates
   MCP->>MCP: check diary relevance and merge context if useful
@@ -153,8 +153,8 @@ sequenceDiagram
   MCP->>DB: vector search memory_chunks using merged retrieval context
   DB-->>MCP: tagged candidates and matching chunks
   MCP->>DB: join matching memory_items
-  MCP->>DB: load typed links for candidate expansion
-  MCP->>MCP: rank, merge, and deduplicate results
+  MCP->>DB: load typed links from top seed items for candidate expansion
+  MCP->>MCP: rank linked candidates, quota-merge, and deduplicate results
   MCP->>DB: insert retrieved memory_item_events
   MCP->>DB: optionally load outgoing links and backlinks
   MCP-->>Caller: related durable memory context
@@ -168,7 +168,7 @@ sequenceDiagram
   participant MCP as Memory MCP
   participant DB as PostgreSQL + pgvector
 
-  Caller->>MCP: ingest_turn(user_input, assistant_output, metadata)
+  Caller->>MCP: ingest_turn(token, user_input, assistant_output, metadata)
   MCP->>MCP: extract candidate memories
   MCP->>MCP: normalize tags
   MCP->>DB: insert memory_items(status=candidate)

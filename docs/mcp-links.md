@@ -22,10 +22,12 @@ Future link types such as `expands`, `derived_from`, `same_topic`, `contradicts`
 ## Retrieval Rules
 
 1. Start from seed candidates from diary relevance, tag matches, and semantic search.
-2. Expand links up to `link_expansion_depth`.
-3. For P0, only `references` can add neighbors to the candidate set.
-4. Deduplicate after expansion.
-5. Apply status, user scope, type filters, and final limit.
+2. Rank seed candidates first.
+3. When `link_expansion_depth > 0`, expand outgoing links and backlinks from the top seed items.
+4. For P0, only `references` can add neighbors to the linked candidate set.
+5. Rank linked candidates in a separate lane using source score and linked chunk score.
+6. Merge seed items and the top linked candidates with a small linked quota, then deduplicate.
+7. Apply status, user scope, type filters, and final limit.
 
 ## Output Rules
 

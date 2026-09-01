@@ -24,7 +24,15 @@ class GetContextInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     input: str = Field(min_length=1)
-    user_id: str = Field(min_length=1)
+    token: str = Field(
+        min_length=1,
+        description="API token used to authenticate the caller and resolve user identity.",
+    )
+    user_id: str = Field(
+        default="0",
+        min_length=1,
+        description="Resolved user identity. Server-side auth overwrites this from token.",
+    )
     session_id: str | None = None
     memory_types: list[MemoryItemType] = Field(
         default_factory=lambda: ["note", "diary", "profile_memory"]
@@ -43,7 +51,13 @@ class IngestTurnMetadata(BaseModel):
     timestamp: datetime
     source: str = Field(min_length=1)
     app: str | None = None
-    user_id: str | None = None
+    user_id: str | None = Field(
+        default=None,
+        description=(
+            "Optional caller hint retained in metadata; "
+            "persisted user identity is resolved from token."
+        ),
+    )
     session_id: str | None = None
     conversation_id: str | None = None
     tags: list[str] = Field(default_factory=list)
@@ -54,6 +68,10 @@ class IngestTurnMetadata(BaseModel):
 class IngestTurnInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    token: str = Field(
+        min_length=1,
+        description="API token used to authenticate the caller and resolve user identity.",
+    )
     user_input: str = Field(min_length=1)
     assistant_output: str = Field(min_length=1)
     metadata: IngestTurnMetadata

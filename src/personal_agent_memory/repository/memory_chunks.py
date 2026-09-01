@@ -38,6 +38,7 @@ class MemoryChunksRepository:
         self,
         *,
         query_embedding: list[float],
+        user_id: str,
         memory_types: list[str],
         limit: int,
     ) -> list[dict[str, Any]]:
@@ -46,6 +47,7 @@ class MemoryChunksRepository:
                 """
                 select
                   mi.id::text as id,
+                  mi.user_id,
                   mi.type::text as type,
                   mi.ingest_reason,
                   mi.title,
@@ -62,12 +64,14 @@ class MemoryChunksRepository:
                 from memory_chunks mc
                 join memory_items mi on mi.id = mc.memory_item_id
                 where mi.status <> 'archived'
+                  and mi.user_id = %s
                   and mi.type::text = any(%s)
                 order by mc.embedding <=> %s::vector
                 limit %s
                 """,
                 (
                     to_pgvector(query_embedding),
+                    user_id,
                     memory_types,
                     to_pgvector(query_embedding),
                     limit,
@@ -79,6 +83,7 @@ class MemoryChunksRepository:
         self,
         *,
         query_embedding: list[float],
+        user_id: str,
         start_date: date,
         limit: int,
     ) -> list[dict[str, Any]]:
@@ -90,6 +95,7 @@ class MemoryChunksRepository:
                 """
                 select
                   mi.id::text as id,
+                  mi.user_id,
                   mi.type::text as type,
                   mi.ingest_reason,
                   mi.title,
@@ -106,6 +112,7 @@ class MemoryChunksRepository:
                 from memory_chunks mc
                 join memory_items mi on mi.id = mc.memory_item_id
                 where mi.status <> 'archived'
+                  and mi.user_id = %s
                   and mi.type = 'diary'
                   and coalesce(mi.event_date, mi.created_at::date) >= %s
                 order by mc.embedding <=> %s::vector
@@ -113,6 +120,7 @@ class MemoryChunksRepository:
                 """,
                 (
                     to_pgvector(query_embedding),
+                    user_id,
                     start_date,
                     to_pgvector(query_embedding),
                     limit,
@@ -124,6 +132,7 @@ class MemoryChunksRepository:
         self,
         *,
         query_embedding: list[float],
+        user_id: str,
         tag_scores: dict[str, float],
         memory_types: list[str],
         tag_weight: float,
@@ -145,6 +154,7 @@ class MemoryChunksRepository:
                 tagged_chunks as (
                   select
                     mi.id::text as id,
+                    mi.user_id,
                     mi.type::text as type,
                     mi.ingest_reason,
                     mi.title,
@@ -164,9 +174,11 @@ class MemoryChunksRepository:
                   join memory_items mi on mi.id = mit.memory_item_id
                   join memory_chunks mc on mc.memory_item_id = mi.id
                   where mi.status <> 'archived'
+                    and mi.user_id = %s
                     and mi.type::text = any(%s)
                   group by
                     mi.id,
+                    mi.user_id,
                     mi.type,
                     mi.ingest_reason,
                     mi.title,
@@ -183,6 +195,7 @@ class MemoryChunksRepository:
                 )
                 select
                   id,
+                  user_id,
                   type,
                   ingest_reason,
                   title,
@@ -206,9 +219,77 @@ class MemoryChunksRepository:
                     tag_ids,
                     scores,
                     to_pgvector(query_embedding),
+                    user_id,
                     memory_types,
                     tag_weight,
                     chunk_weight,
+                    limit,
+                ),
+            )
+            return [dict(row) for row in await cursor.fetchall()]
+
+    async def search_by_linked_items(
+        self,
+        *,
+        query_embedding: list[float],
+        user_id: str,
+        item_source_scores: dict[str, float],
+        memory_types: list[str],
+        source_weight: float,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        if limit <= 0 or not item_source_scores:
+            return []
+
+        item_ids = list(item_source_scores)
+        source_scores = [float(item_source_scores[item_id]) for item_id in item_ids]
+        chunk_weight = 1 - source_weight
+
+        async with await self._connect() as conn:
+            cursor = await conn.execute(
+                """
+                with linked_items(item_id, source_score) as (
+                  select * from unnest(%s::uuid[], %s::double precision[])
+                )
+                select
+                  mi.id::text as id,
+                  mi.user_id,
+                  mi.type::text as type,
+                  mi.ingest_reason,
+                  mi.title,
+                  mi.body,
+                  mi.status::text as status,
+                  mi.event_date,
+                  mi.created_at,
+                  mi.updated_at,
+                  mc.id::text as chunk_id,
+                  mc.chunk_index,
+                  mc.content as chunk_content,
+                  mc.token_count,
+                  li.source_score,
+                  1 - (mc.embedding <=> %s::vector) as chunk_score,
+                  (
+                    li.source_score * %s
+                    + (1 - (mc.embedding <=> %s::vector)) * %s
+                  ) as score
+                from linked_items li
+                join memory_items mi on mi.id = li.item_id
+                join memory_chunks mc on mc.memory_item_id = mi.id
+                where mi.status <> 'archived'
+                  and mi.user_id = %s
+                  and mi.type::text = any(%s)
+                order by score desc
+                limit %s
+                """,
+                (
+                    item_ids,
+                    source_scores,
+                    to_pgvector(query_embedding),
+                    source_weight,
+                    to_pgvector(query_embedding),
+                    chunk_weight,
+                    user_id,
+                    memory_types,
                     limit,
                 ),
             )

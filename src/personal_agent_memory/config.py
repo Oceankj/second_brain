@@ -11,6 +11,8 @@ from typing import Any
 @dataclass(frozen=True)
 class Settings:
     database_url: str
+    rest_api_enabled: bool = False
+    default_user_token: str | None = None
     embedding_dimension: int = 1024
     ollama_embedding_model: str = "qwen3-embedding:0.6b"
     ollama_base_url: str = "http://localhost:11434"
@@ -24,10 +26,15 @@ class Settings:
     tag_retrieval_min_score: float = 0.72
     tag_retrieval_max_tags: int = 5
     tag_retrieval_tag_weight: float = 0.4
+    link_expansion_max_items: int = 3
+    link_expansion_source_limit: int = 5
+    link_expansion_source_weight: float = 0.4
 
     def __post_init__(self) -> None:
         if self.max_chunk_chars <= 0:
             raise ValueError("max_chunk_chars must be positive")
+        if self.default_user_token is not None and len(self.default_user_token) < 32:
+            raise ValueError("default_user_token must be at least 32 characters")
         if self.chunk_overlap_chars < 0:
             raise ValueError("chunk_overlap_chars cannot be negative")
         if self.chunk_overlap_chars >= self.max_chunk_chars:
@@ -46,6 +53,12 @@ class Settings:
             raise ValueError("tag_retrieval_max_tags cannot be negative")
         if not 0 <= self.tag_retrieval_tag_weight <= 1:
             raise ValueError("tag_retrieval_tag_weight must be between 0 and 1")
+        if self.link_expansion_max_items < 0:
+            raise ValueError("link_expansion_max_items cannot be negative")
+        if self.link_expansion_source_limit < 0:
+            raise ValueError("link_expansion_source_limit cannot be negative")
+        if not 0 <= self.link_expansion_source_weight <= 1:
+            raise ValueError("link_expansion_source_weight must be between 0 and 1")
 
 
 def load_settings() -> Settings:
@@ -58,6 +71,8 @@ def load_settings() -> Settings:
 
     return Settings(
         database_url=database_url,
+        rest_api_enabled=config_bool_from_env("MEMORY_REST_API_ENABLED", default=False),
+        default_user_token=os.environ.get("MEMORY_DEFAULT_USER_TOKEN"),
         embedding_dimension=int(os.environ.get("MEMORY_EMBEDDING_DIMENSION", "1024")),
         ollama_embedding_model=os.environ.get(
             "OLLAMA_EMBEDDING_MODEL",
@@ -117,6 +132,24 @@ def load_settings() -> Settings:
             memory_config,
             section="retrieval",
             key="tag_retrieval_tag_weight",
+            default=0.4,
+        ),
+        link_expansion_max_items=config_int(
+            memory_config,
+            section="retrieval",
+            key="link_expansion_max_items",
+            default=3,
+        ),
+        link_expansion_source_limit=config_int(
+            memory_config,
+            section="retrieval",
+            key="link_expansion_source_limit",
+            default=5,
+        ),
+        link_expansion_source_weight=config_float(
+            memory_config,
+            section="retrieval",
+            key="link_expansion_source_weight",
             default=0.4,
         ),
     )
@@ -187,3 +220,16 @@ def config_float(
     if value is None:
         value = default
     return float(value)
+
+
+def config_bool_from_env(key: str, *, default: bool) -> bool:
+    raw_value = os.environ.get(key)
+    if raw_value is None:
+        return default
+
+    normalized = raw_value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{key} must be a boolean value")

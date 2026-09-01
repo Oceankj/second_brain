@@ -7,7 +7,7 @@ P0 先實作兩個 tools：`get_context` 與 `ingest_turn`。
 根據使用者目前輸入，搜尋 durable memory stores，回傳精簡、可引用、可追溯的 context bundle。
 
 ```text
-get_context(input, user_id, session_id?)
+get_context(input, token, session_id?)
   -> load recent diary entries from the last 1-2 days
   -> check whether recent diary is relevant to input
   -> merge relevant diary context into retrieval context
@@ -32,6 +32,7 @@ Output schema:
 ### Behavior
 
 - 預設搜尋 `note`、`diary`、`profile_memory`。
+- Caller 必須提供 top-level `token`；server 會用 token 驗證並解析 user identity。
 - Retrieval 會先用原始 input embedding 搜尋最近 N 天的 `diary` chunks，將分數達到 `memory.json` 門檻的 diary 視為 relevant。
 - 若 caller 未提供 `diary_lookback_days`，server 使用 `memory.json` 的 `retrieval.recent_diary_lookback_days` 作為預設；caller 仍可逐次 override。
 - 若 recent diary 相關，先把 diary context 併入 retrieval context，再進 semantic retrieval。
@@ -39,8 +40,9 @@ Output schema:
 - Tag retrieval 會用 retrieval query embedding 搜尋 `tags.embedding`，再從超過 `retrieval.tag_retrieval_min_score` 的 tags 載入 tagged chunks。
 - Tagged chunk score 使用 `tag_score * tag_retrieval_tag_weight + chunk_score * (1 - tag_retrieval_tag_weight)`；預設 tag 佔 0.4、chunk 佔 0.6。
 - Tags 不在一般 `get_context` output 中 attach；tag match 只作為 retrieval signal 補候選 items。
-- P0 links 只支援 `references`，可用於 candidate expansion 與 backlinks，詳見 [mcp-links.md](mcp-links.md)。
-- Recent diary、tag candidates、semantic matches 與 link-expanded candidates 需要合併、去重，再套用 status/user scope/limit。
+- P0 links 只支援 `references`；當 `link_expansion_depth > 0` 時，會從 top seed items 的 outgoing links 與 backlinks 找 linked candidates，詳見 [mcp-links.md](mcp-links.md)。
+- Linked candidates 會先在自己的 lane 內 ranking，最多取 `retrieval.link_expansion_max_items` 則，再與 seed items 做 quota merge。
+- Recent diary、tag candidates、semantic matches 與 link-expanded candidates 會合併、去重，再套用 status/user scope/limit。
 - 回傳內容應該是相關 durable memory context，不負責 reasoning 或 answer generation。
 - P0 會記錄 returned memory items 的 `retrieved` events，作為未來 hot/cold ranking 的 raw signals。
 - 若 `include_links` 為 true，回傳 outgoing links 與 backlinks。
@@ -57,7 +59,7 @@ Output schema:
 ```json
 {
   "input": "我接下來要繼續整理 personal memory MCP 的資料模型",
-  "user_id": "user-local",
+  "token": "<memory-default-user-token>",
   "session_id": "codex-2026-07-30",
   "link_expansion_depth": 1,
   "max_context_chars": 6000,
@@ -70,7 +72,7 @@ Output schema:
 把一次 interaction 轉成可保存的 memory source，建立帶有 `ingest_reason` 的 candidate memory item。
 
 ```text
-ingest_turn(user_input, assistant_output, metadata)
+ingest_turn(token, user_input, assistant_output, metadata)
   -> evaluate ingest policy from metadata
   -> skip without writes when policy says this turn is not durable memory
   -> extract candidate memories
@@ -96,6 +98,7 @@ Output schema:
 ### Behavior
 
 - Memory source 是完整 interaction，不只是 assistant output。
+- Caller 必須提供 top-level `token`；server 會用 token 驗證並決定寫入的 `user_id`。
 - P0 要求 caller 提供 `metadata.ingest_reason`，避免每輪 raw output 都無腦寫入 durable memory。
 - 若 `metadata.skip_memory=true`，或缺少 `metadata.ingest_reason`，`ingest_turn` 會回傳 `status=skipped` 並且不寫 DB。
 - 允許的 `ingest_reason` 是 `task_completed`、`explicit_memory_request`、`user_preference`、`stable_fact`、`personal_insight`、`decision`、`stable_artifact`、`manual_import`。
@@ -124,6 +127,7 @@ Output schema:
 
 ```json
 {
+  "token": "<memory-default-user-token>",
   "user_input": "幫我整理一版 MCP-first 文件",
   "assistant_output": "已建立 mcp-server、mcp-tools、resources、prompts 與 schemas",
   "metadata": {

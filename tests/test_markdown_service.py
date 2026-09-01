@@ -1,6 +1,6 @@
 from datetime import UTC, date, datetime
 
-from personal_agent_memory.services.markdown import MarkdownService
+from personal_agent_memory.services.memory.markdown import MarkdownService
 
 
 def test_item_to_markdown_renders_front_matter_and_body() -> None:

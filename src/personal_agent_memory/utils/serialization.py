@@ -11,6 +11,7 @@ def serialize_item(
 ) -> dict[str, Any]:
     return {
         "id": item["id"],
+        "user_id": item.get("user_id", "0"),
         "type": item["type"],
         "ingest_reason": item.get("ingest_reason"),
         "title": item["title"],

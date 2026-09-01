@@ -10,6 +10,9 @@
     "recent_diary_max_chars": 2000,
     "tag_retrieval_min_score": 0.72,
     "tag_retrieval_max_tags": 5,
-    "tag_retrieval_tag_weight": 0.4
+    "tag_retrieval_tag_weight": 0.4,
+    "link_expansion_max_items": 3,
+    "link_expansion_source_limit": 5,
+    "link_expansion_source_weight": 0.4
   }
 }

@@ -23,7 +23,7 @@ Possible arguments:
 Possible arguments:
 
 - `date`
-- `user_id`
+- `token`
 
 ### normalize_tags
 

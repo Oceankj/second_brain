@@ -16,7 +16,7 @@
 - `get_context`: 在回答或工作前讀 durable memory。
 - `ingest_turn`: 在 turn 或 conversation 結束後寫 durable memory。
 
-因此 `server.py` 應該保持很薄：負責 FastMCP tool registration、input model validation、呼叫 service，然後把結果回傳。
+因此 transport adapter 應該保持很薄：負責 tool/route registration、input model validation、呼叫 service，然後把結果回傳。
 
 ### Vertical slice before optimization
 
@@ -51,17 +51,27 @@ class EmbeddingProvider(Protocol):
 
 ```text
 personal_agent_memory/
-  server.py       FastMCP app and tool handlers.
   config.py       Environment-backed runtime settings plus memory.json behavior config.
   tool_schemas.py Pydantic models matching docs/schemas JSON Schema intent.
-  service.py      Thin facade that composes use-case services.
+  server/
+    mcp.py          FastMCP app and tool handlers.
+    restful.py      Small REST adapter for user CRUD.
+    dependencies.py Shared runtime wiring for adapters.
   repository/     PostgreSQL/pgvector persistence adapters by table.
   providers/
     embeddings.py Embedding provider protocol and Ollama provider.
   services/
-    ingestion.py   ingest_turn use case.
-    retrieval.py   get_context use case.
-    chunking.py    Text chunking helpers used by ingestion.
+    memory/
+      service.py       Thin facade that composes memory use-case services.
+      ingestion.py     ingest_turn use case.
+      chunking.py      Text chunking helpers used by ingestion.
+      ingest_policy.py Deterministic ingest policy.
+      markdown.py      Markdown memory rendering helpers.
+      retrieval/
+        service.py     get_context orchestration.
+        policy.py      Pure retrieval ranking, quota, merge, and response helpers.
+    users/
+      service.py       User resolution and CRUD use cases.
   utils/
     serialization.py    Response serialization helpers.
     text_processing.py  Title, tag, body, and wikilink helpers.
@@ -71,7 +81,7 @@ personal_agent_memory/
 
 ### `ingest_turn`
 
-`server.py` receives MCP tool args and builds an `IngestTurnInput`.
+`server/mcp.py` receives MCP tool args and builds an `IngestTurnInput`.
 
 `MemoryService` delegates to `IngestionService.ingest_turn`, which then:
 
@@ -100,7 +110,7 @@ or LLM-assisted extraction without changing the MCP tool boundary.
 
 ### `get_context`
 
-`server.py` receives MCP tool args and builds a `GetContextInput`.
+`server/mcp.py` receives MCP tool args and builds a `GetContextInput`.
 
 `MemoryService` delegates to `RetrievalService.get_context`, which then:
 
@@ -109,18 +119,19 @@ or LLM-assisted extraction without changing the MCP tool boundary.
 3. Searches `memory_chunks` with pgvector cosine distance.
 4. Searches similar `tags.embedding` rows, loads tagged chunks, and scores them with the configured tag/chunk weight.
 5. Joins matching chunks back to `memory_items`.
-6. Deduplicates by memory item.
-7. Sorts by best candidate score.
-8. Writes `retrieved` events for returned items.
-9. Optionally loads outgoing links and backlinks.
-10. Builds and truncates `compact_context` to `max_context_chars`.
-11. Returns a `get_context.output` shaped response.
+6. Deduplicates by memory item and ranks seed candidates.
+7. Expands outgoing links and backlinks from top seed items when `link_expansion_depth > 0`.
+8. Ranks linked candidates in a separate lane, then quota-merges them with seed items.
+9. Writes `retrieved` events for returned items.
+10. Optionally loads outgoing links and backlinks for response serialization.
+11. Builds and truncates `compact_context` to `max_context_chars`.
+12. Returns a `get_context.output` shaped response.
 
-The current version does not yet implement typed link expansion, full-text search, or reranking. Those belong after the P0 write/read path is proven.
+The current version does not yet implement full-text search or reranking. Those belong after the P0 write/read path is proven.
 
 ## Boundaries
 
-### `server.py`
+### `server/mcp.py`
 
 Keep this as the transport adapter. It should know about FastMCP and input/output argument shapes, but should not grow business logic.
 
@@ -138,9 +149,26 @@ Avoid:
 - Ranking logic.
 - Provider-specific embedding code.
 
-### `service.py`
+### `server/restful.py`
 
-This is a thin facade. It exists so `server.py` can depend on one object while the actual use cases live in smaller services.
+This is the REST transport adapter. P0 keeps it focused on user CRUD so user management stays separate from MCP tool calls.
+
+Good responsibilities:
+
+- Register REST routes.
+- Parse JSON request bodies.
+- Call `UserService`.
+- Return JSON responses.
+
+Avoid:
+
+- Memory ingestion or retrieval orchestration.
+- SQL queries.
+- Embedding provider calls.
+
+### `services/memory/service.py`
+
+This is a thin facade. It exists so transport adapters can depend on one memory object while the actual use cases live in smaller services.
 
 Good responsibilities:
 
@@ -155,7 +183,7 @@ Avoid:
 - Provider-specific API calls.
 - Use-case logic that belongs in a dedicated service.
 
-### `services/ingestion.py`
+### `services/memory/ingestion.py`
 
 This owns the `ingest_turn` use case.
 
@@ -174,24 +202,60 @@ Avoid:
 - Daily consolidation.
 - Long-term profile stability rules.
 
-### `services/retrieval.py`
+### `services/memory/retrieval/service.py`
 
 This owns the `get_context` use case.
 
 Good responsibilities:
 
 - Embed caller query.
-- Search matching chunks.
-- Deduplicate and rank memory items.
+- Build the retrieval query plan.
+- Coordinate semantic, tag, diary, and linked candidate retrieval.
 - Log `retrieved` events.
 - Attach selected links.
-- Build context response.
+- Delegate ranking, quota, merge, and response shaping to `retrieval/policy.py`.
 
 Avoid:
 
 - Ingestion writes.
 - Memory extraction.
 - Tag normalization writes.
+- Ranking or quota rules that can be pure functions.
+
+### `services/memory/retrieval/policy.py`
+
+This owns pure retrieval rules and data containers.
+
+Good responsibilities:
+
+- Hold retrieval-specific config and query-plan dataclasses.
+- Rank chunk rows into memory items.
+- Compute link expansion budget.
+- Collect linked candidate source scores.
+- Merge seed and linked candidates.
+- Build retrieval query and final context response.
+
+Avoid:
+
+- Repository calls.
+- Embedding provider calls.
+- MCP adapter or runtime settings.
+
+### `services/users/service.py`
+
+This owns simple user management.
+
+Good responsibilities:
+
+- Resolve missing user IDs to the default user `0`.
+- Ensure a user exists before memory writes.
+- Serialize users for REST responses.
+
+Avoid:
+
+- Memory ingestion policy.
+- Retrieval ranking.
+- Profile observation logic.
 
 ### `utils/serialization.py`
 

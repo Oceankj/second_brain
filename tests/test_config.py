@@ -20,7 +20,10 @@ def test_load_memory_config_reads_repo_local_json(tmp_path: Path) -> None:
     "recent_diary_max_chars": 3000,
     "tag_retrieval_min_score": 0.81,
     "tag_retrieval_max_tags": 7,
-    "tag_retrieval_tag_weight": 0.35
+    "tag_retrieval_tag_weight": 0.35,
+    "link_expansion_max_items": 4,
+    "link_expansion_source_limit": 6,
+    "link_expansion_source_weight": 0.45
   }
 }
 """
@@ -39,6 +42,9 @@ def test_load_memory_config_reads_repo_local_json(tmp_path: Path) -> None:
             "tag_retrieval_min_score": 0.81,
             "tag_retrieval_max_tags": 7,
             "tag_retrieval_tag_weight": 0.35,
+            "link_expansion_max_items": 4,
+            "link_expansion_source_limit": 6,
+            "link_expansion_source_weight": 0.45,
         },
     }
 
@@ -64,7 +70,10 @@ def test_load_settings_uses_memory_json_for_chunking(
     "recent_diary_max_chars": 3000,
     "tag_retrieval_min_score": 0.81,
     "tag_retrieval_max_tags": 7,
-    "tag_retrieval_tag_weight": 0.35
+    "tag_retrieval_tag_weight": 0.35,
+    "link_expansion_max_items": 4,
+    "link_expansion_source_limit": 6,
+    "link_expansion_source_weight": 0.45
   }
 }
 """
@@ -81,6 +90,9 @@ def test_load_settings_uses_memory_json_for_chunking(
     assert settings.tag_retrieval_min_score == 0.81
     assert settings.tag_retrieval_max_tags == 7
     assert settings.tag_retrieval_tag_weight == 0.35
+    assert settings.link_expansion_max_items == 4
+    assert settings.link_expansion_source_limit == 6
+    assert settings.link_expansion_source_weight == 0.45
 
 
 def test_load_settings_does_not_read_chunking_from_env(
@@ -103,6 +115,30 @@ def test_load_settings_does_not_read_chunking_from_env(
     assert settings.tag_retrieval_min_score == 0.72
     assert settings.tag_retrieval_max_tags == 5
     assert settings.tag_retrieval_tag_weight == 0.4
+    assert settings.link_expansion_max_items == 3
+    assert settings.link_expansion_source_limit == 5
+    assert settings.link_expansion_source_weight == 0.4
+
+
+def test_load_settings_reads_rest_api_enabled_from_env(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("DATABASE_URL", "postgresql://example")
+    monkeypatch.setenv("MEMORY_REST_API_ENABLED", "true")
+
+    settings = load_settings()
+
+    assert settings.rest_api_enabled is True
+
+
+def test_settings_rejects_short_default_user_token() -> None:
+    with pytest.raises(ValueError, match="default_user_token"):
+        Settings(
+            database_url="postgresql://example",
+            default_user_token="too-short",
+        )
 
 
 def test_settings_rejects_invalid_chunk_overlap() -> None:
@@ -135,4 +171,12 @@ def test_settings_rejects_invalid_tag_retrieval_weight() -> None:
         Settings(
             database_url="postgresql://example",
             tag_retrieval_tag_weight=1.1,
+        )
+
+
+def test_settings_rejects_invalid_link_expansion_weight() -> None:
+    with pytest.raises(ValueError, match="link_expansion_source_weight"):
+        Settings(
+            database_url="postgresql://example",
+            link_expansion_source_weight=1.1,
         )
