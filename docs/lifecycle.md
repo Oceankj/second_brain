@@ -35,11 +35,7 @@ flowchart TD
   seedSet --> linkPolicy["Rank seeds, expand typed links, and rank linked candidates"]
   linkPolicy --> filterItems["Quota-merge, deduplicate, and filter by type, status, user scope, and limit"]
   filterItems --> logRetrieval["Insert retrieved events"]
-  logRetrieval --> includeLinks{"include_links?"}
-
-  includeLinks -- "Yes" --> loadLinks["Include selected outgoing links and backlinks"]
-  includeLinks -- "No" --> compact["Build compact context bundle"]
-  loadLinks --> compact
+  logRetrieval --> compact["Build compact context bundle"]
 
   compact --> response["Return related durable memory"]
 ```
@@ -50,7 +46,7 @@ Notes:
 - Tags are still important retrieval references: matched tags can add candidate memory items or boost ranking, but they do not need to be returned.
 - Recent diary entries are checked with embedding similarity before RAG because they carry short-term life/work context that semantic search may miss.
 - If recent diary is relevant, it becomes part of the retrieval context before semantic search.
-- P0 links only support `references`, which can affect candidate expansion and backlinks.
+- P0 links only support `references`, which can affect candidate expansion.
 - `get_context` should return relevant memory, not perform reasoning over that memory.
 
 ## Ingestion Lifecycle
@@ -156,7 +152,6 @@ sequenceDiagram
   MCP->>DB: load typed links from top seed items for candidate expansion
   MCP->>MCP: rank linked candidates, quota-merge, and deduplicate results
   MCP->>DB: insert retrieved memory_item_events
-  MCP->>DB: optionally load outgoing links and backlinks
   MCP-->>Caller: related durable memory context
 ```
 

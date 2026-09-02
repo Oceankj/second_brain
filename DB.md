@@ -239,9 +239,8 @@ P0 不加 `heat_score` 或 `importance_score`。它們是 derived ranking values
 6. 將 semantic matches join 回 `memory_items`。
 7. 根據 typed `memory_links` expansion 或 rerank candidates。
 8. Merge candidates、deduplicate，並套用 type/status/user scope/limit。
-9. 視需要加入精選 outgoing links 與 backlinks。
-10. 對回傳的 memory items 寫入 `retrieved` events。
-11. 回傳 durable memory context 給 caller。
+9. 對回傳的 memory items 寫入 `retrieved` events。
+10. 回傳 durable memory context 給 caller。
 
 Tags 是有用的 retrieval references，但一般 context retrieval 不一定要把 tags 附在最終回傳內容中。
 

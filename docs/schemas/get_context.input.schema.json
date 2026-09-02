@@ -20,26 +20,12 @@
       "type": "string",
       "description": "Optional session or conversation identifier."
     },
-    "memory_types": {
-      "type": "array",
-      "description": "若未提供，預設搜尋 note、diary、profile_memory。",
-      "items": {
-        "$ref": "#/$defs/memory_item_type"
-      },
-      "default": ["note", "diary", "profile_memory"]
-    },
     "diary_lookback_days": {
       "type": ["integer", "null"],
       "minimum": 0,
       "maximum": 7,
       "default": null,
       "description": "固定載入最近幾天的 diary。若未提供，使用 memory.json 的 retrieval.recent_diary_lookback_days；0 表示不載入 recent diary recency layer。"
-    },
-    "limit": {
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 50,
-      "default": 10
     },
     "max_context_chars": {
       "type": "integer",
@@ -48,26 +34,9 @@
       "default": 6000,
       "description": "Hard character budget for compact_context. Returned items may still include structured provenance."
     },
-    "include_links": {
-      "type": "boolean",
-      "default": true
-    },
-    "link_expansion_depth": {
-      "type": "integer",
-      "minimum": 0,
-      "maximum": 2,
-      "default": 1,
-      "description": "Typed link expansion depth used during retrieval. 0 disables link expansion."
-    },
     "include_chunks": {
       "type": "boolean",
       "default": false
-    }
-  },
-  "$defs": {
-    "memory_item_type": {
-      "type": "string",
-      "enum": ["note", "diary", "profile_memory"]
     }
   }
 }

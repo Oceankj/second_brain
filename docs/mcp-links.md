@@ -15,7 +15,7 @@ Backlinks are queried by filtering `target_id`; two-way display does not require
 
 | link_type | Meaning | Retrieval Use | Maintenance Use |
 | --- | --- | --- | --- |
-| `references` | Source directly mentions or depends on target. | Light expansion and visible backlinks. | Preserve when merging/splitting notes. |
+| `references` | Source directly mentions or depends on target. | Light expansion through outgoing links and backlinks. | Preserve when merging/splitting notes. |
 
 Future link types such as `expands`, `derived_from`, `same_topic`, `contradicts`, and `supersedes` should wait until the retrieval or maintenance code has concrete behavior for them.
 
@@ -23,7 +23,7 @@ Future link types such as `expands`, `derived_from`, `same_topic`, `contradicts`
 
 1. Start from seed candidates from diary relevance, tag matches, and semantic search.
 2. Rank seed candidates first.
-3. When `link_expansion_depth > 0`, expand outgoing links and backlinks from the top seed items.
+3. Expand outgoing links and backlinks from the top seed items according to server retrieval policy.
 4. For P0, only `references` can add neighbors to the linked candidate set.
 5. Rank linked candidates in a separate lane using source score and linked chunk score.
 6. Merge seed items and the top linked candidates with a small linked quota, then deduplicate.
@@ -31,6 +31,6 @@ Future link types such as `expands`, `derived_from`, `same_topic`, `contradicts`
 
 ## Output Rules
 
-`get_context` may use links internally even when `include_links` is false.
+`get_context` uses links internally for retrieval expansion, but does not return outgoing links or backlinks in the normal context response.
 
-When `include_links` is true, return only selected links that explain or help navigate the returned items. The result should not dump the full graph.
+If a caller needs graph navigation later, add a dedicated links-oriented tool or resource instead of expanding the `get_context` response shape.

@@ -70,10 +70,6 @@
         "manual_import"
       ]
     },
-    "memory_link_type": {
-      "type": "string",
-      "enum": ["references"]
-    },
     "memory_chunk": {
       "type": "object",
       "additionalProperties": false,
@@ -100,32 +96,6 @@
         },
         "score": {
           "type": ["number", "null"]
-        }
-      }
-    },
-    "memory_link": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["id", "source_id", "target_id", "link_type", "created_at"],
-      "properties": {
-        "id": {
-          "type": "string",
-          "format": "uuid"
-        },
-        "source_id": {
-          "type": "string",
-          "format": "uuid"
-        },
-        "target_id": {
-          "type": "string",
-          "format": "uuid"
-        },
-        "link_type": {
-          "$ref": "#/$defs/memory_link_type"
-        },
-        "created_at": {
-          "type": "string",
-          "format": "date-time"
         }
       }
     },
@@ -182,18 +152,6 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/memory_chunk"
-          }
-        },
-        "outgoing_links": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/memory_link"
-          }
-        },
-        "backlinks": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/memory_link"
           }
         }
       }

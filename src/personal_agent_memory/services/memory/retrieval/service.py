@@ -57,14 +57,11 @@ class RetrievalService:
 
         serialized_items = await self._serialize_items(
             final_items,
-            user_id=payload.user_id,
             include_chunks=payload.include_chunks,
-            include_links=payload.include_links,
         )
         recent_diaries = serialize_items(
             query_plan.recent_diaries,
             include_chunks=payload.include_chunks,
-            link_map={},
         )
 
         return build_context_response(
@@ -209,28 +206,9 @@ class RetrievalService:
         self,
         items: list[dict[str, Any]],
         *,
-        user_id: str,
         include_chunks: bool,
-        include_links: bool,
     ) -> list[dict[str, Any]]:
-        item_ids = [item["id"] for item in items]
-        link_map = await self._load_link_map(
-            item_ids,
-            user_id=user_id,
-            include_links=include_links,
-        )
-        return serialize_items(items, include_chunks=include_chunks, link_map=link_map)
-
-    async def _load_link_map(
-        self,
-        item_ids: list[str],
-        *,
-        user_id: str,
-        include_links: bool,
-    ) -> dict[str, Any]:
-        if not include_links or not item_ids:
-            return {}
-        return await self.repository.memory_links.load_for_items(item_ids, user_id=user_id)
+        return serialize_items(items, include_chunks=include_chunks)
 
     async def _load_relevant_recent_diaries(
         self,

@@ -28,16 +28,12 @@ def serialize_context_item(
     item: dict[str, Any],
     *,
     include_chunks: bool,
-    links: dict[str, list[dict[str, Any]]] | None,
 ) -> dict[str, Any]:
     serialized = serialize_item(item)
     serialized["score"] = item["score"]
     serialized.pop("tags", None)
     if include_chunks:
         serialized["matched_chunks"] = item["matched_chunks"]
-    if links:
-        serialized["outgoing_links"] = [serialize_link(link) for link in links["outgoing_links"]]
-        serialized["backlinks"] = [serialize_link(link) for link in links["backlinks"]]
     return serialized
 
 

@@ -222,7 +222,7 @@ Tags 負責分類，links 負責具體關聯。建立新 note 前應該先搜尋
 
 ## Update Timing
 
-每次對話結束或每次 turn 完成後，外層 agent 只有在符合 ingest policy 時才應呼叫 `ingest_turn` 建立 raw-ish 的 candidate note。P0 要求 `metadata.ingest_reason` 明確說明寫入原因；沒有原因時 server 會回傳 `skipped` 並且不寫 DB。
+每次對話結束或每次 turn 完成後，外層 agent 只有在符合 ingest policy 時才應呼叫 `ingest_turn` 建立 raw-ish 的 candidate note。P0 要求 `metadata.ingest_reason` 明確說明寫入原因；沒有原因是 invalid input，不會建立 memory item。
 
 MVP 允許的 `ingest_reason`：
 

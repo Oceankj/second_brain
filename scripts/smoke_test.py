@@ -177,30 +177,6 @@ async def check_mcp_tool_calls(default_user_token: str) -> None:
                 print(f"OK: MCP tools listed: {', '.join(sorted(REQUIRED_TOOLS))}")
 
                 run_id = uuid4().hex[:12]
-                skipped_result = await session.call_tool(
-                    "ingest_turn",
-                    arguments={
-                        "token": default_user_token,
-                        "user_input": f"Smoke test skipped memory source {run_id}",
-                        "assistant_output": (
-                            "This should be skipped because it has no policy signal."
-                        ),
-                        "metadata": {
-                            "timestamp": datetime.now(UTC).isoformat(),
-                            "source": "smoke_test",
-                            "app": "scripts/smoke_test.py",
-                            "session_id": f"smoke-{run_id}",
-                            "tags": ["smoke-test", "mcp"],
-                        },
-                    },
-                )
-                skipped_payload = parse_tool_payload(skipped_result)
-                if skipped_payload.get("status") != "skipped":
-                    raise RuntimeError(
-                        f"ingest_turn without ingest_reason should skip: {skipped_payload}"
-                    )
-                print("OK: MCP ingest_turn policy skipped unqualified turn")
-
                 ingest_result = await session.call_tool(
                     "ingest_turn",
                     arguments={
@@ -230,9 +206,7 @@ async def check_mcp_tool_calls(default_user_token: str) -> None:
                         "input": f"Find the smoke test memory source {run_id}",
                         "token": default_user_token,
                         "session_id": f"smoke-{run_id}",
-                        "limit": 5,
                         "max_context_chars": 6000,
-                        "include_links": True,
                         "include_chunks": True,
                     },
                 )

@@ -16,7 +16,6 @@ get_context(input, token, session_id?)
   -> expand and rank candidates through typed links
   -> merge and deduplicate results
   -> log retrieval events for returned memory items
-  -> optionally include outgoing links and backlinks
   -> enforce max_context_chars on compact_context
   -> return related durable memory context
 ```
@@ -40,12 +39,11 @@ Output schema:
 - Tag retrieval 會用 retrieval query embedding 搜尋 `tags.embedding`，再從超過 `retrieval.tag_retrieval_min_score` 的 tags 載入 tagged chunks。
 - Tagged chunk score 使用 `tag_score * tag_retrieval_tag_weight + chunk_score * (1 - tag_retrieval_tag_weight)`；預設 tag 佔 0.4、chunk 佔 0.6。
 - Tags 不在一般 `get_context` output 中 attach；tag match 只作為 retrieval signal 補候選 items。
-- P0 links 只支援 `references`；當 `link_expansion_depth > 0` 時，會從 top seed items 的 outgoing links 與 backlinks 找 linked candidates，詳見 [mcp-links.md](mcp-links.md)。
+- P0 links 只支援 `references`；server 會依內部 retrieval policy 從 top seed items 的 outgoing links 與 backlinks 找 linked candidates，詳見 [mcp-links.md](mcp-links.md)。
 - Linked candidates 會先在自己的 lane 內 ranking，最多取 `retrieval.link_expansion_max_items` 則，再與 seed items 做 quota merge。
 - Recent diary、tag candidates、semantic matches 與 link-expanded candidates 會合併、去重，再套用 status/user scope/limit。
 - 回傳內容應該是相關 durable memory context，不負責 reasoning 或 answer generation。
 - P0 會記錄 returned memory items 的 `retrieved` events，作為未來 hot/cold ranking 的 raw signals。
-- 若 `include_links` 為 true，回傳 outgoing links 與 backlinks。
 - 若 `include_chunks` 為 true，可以回傳命中的 chunk；預設應避免過量 token。
 - `max_context_chars` 是 `compact_context` 的 server-side hard budget，預設 6000。超過時會截斷 `compact_context` 並回傳 `context_truncated=true`。
 - `items` 保留結構化 provenance；外層 agent 應優先把 `compact_context` 放進 prompt，而不是直接 dump `items`。
@@ -61,9 +59,7 @@ Output schema:
   "input": "我接下來要繼續整理 personal memory MCP 的資料模型",
   "token": "<memory-default-user-token>",
   "session_id": "codex-2026-07-30",
-  "link_expansion_depth": 1,
-  "max_context_chars": 6000,
-  "limit": 10
+  "max_context_chars": 6000
 }
 ```
 
@@ -74,7 +70,6 @@ Output schema:
 ```text
 ingest_turn(token, user_input, assistant_output, metadata)
   -> evaluate ingest policy from metadata
-  -> skip without writes when policy says this turn is not durable memory
   -> extract candidate memories
   -> normalize tags
   -> create candidate memory_items
@@ -100,7 +95,8 @@ Output schema:
 - Memory source 是完整 interaction，不只是 assistant output。
 - Caller 必須提供 top-level `token`；server 會用 token 驗證並決定寫入的 `user_id`。
 - P0 要求 caller 提供 `metadata.ingest_reason`，避免每輪 raw output 都無腦寫入 durable memory。
-- 若 `metadata.skip_memory=true`，或缺少 `metadata.ingest_reason`，`ingest_turn` 會回傳 `status=skipped` 並且不寫 DB。
+- 若不想寫入 durable memory，caller 不應呼叫 `ingest_turn`。
+- 缺少 `metadata.ingest_reason` 是 invalid input，不會建立 memory item。
 - 允許的 `ingest_reason` 是 `task_completed`、`explicit_memory_request`、`user_preference`、`stable_fact`、`personal_insight`、`decision`、`stable_artifact`、`manual_import`。
 - P0 使用 deterministic routing：`ingest_turn` 不推論 reason；caller 提供 `metadata.ingest_reason` 後，server 將它寫入 `memory_items.ingest_reason`。
 - 目前所有 accepted turns 都先建立 `note` candidate。`user_preference`、`stable_fact`、`personal_insight` 的後續用途由 daily maintenance tasks 根據 `ingest_reason` 判斷。

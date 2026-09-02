@@ -131,13 +131,11 @@ def serialize_items(
     items: list[dict[str, Any]],
     *,
     include_chunks: bool,
-    link_map: dict[str, Any],
 ) -> list[dict[str, Any]]:
     return [
         serialize_context_item(
             item,
             include_chunks=include_chunks,
-            links=link_map.get(item["id"]),
         )
         for item in items
     ]

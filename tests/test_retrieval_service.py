@@ -333,6 +333,8 @@ async def test_get_context_reserves_space_for_top_linked_candidates() -> None:
     }
     assert repository.memory_chunks.search_by_linked_items_calls[0]["source_weight"] == 0.4
     assert [item["id"] for item in result["items"]] == ["note-1", "linked-note-1"]
+    assert "outgoing_links" not in result["items"][0]
+    assert "backlinks" not in result["items"][0]
 
 
 def test_build_retrieval_query_respects_recent_diary_char_budget() -> None:

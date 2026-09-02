@@ -21,8 +21,8 @@
     },
     "metadata": {
       "type": "object",
-      "additionalProperties": true,
-      "required": ["timestamp", "source"],
+      "additionalProperties": false,
+      "required": ["timestamp", "source", "ingest_reason"],
       "properties": {
         "timestamp": {
           "type": "string",
@@ -36,14 +36,7 @@
         "app": {
           "type": "string"
         },
-        "user_id": {
-          "type": "string",
-          "description": "Optional caller hint retained in metadata; persisted user identity is resolved from token."
-        },
         "session_id": {
-          "type": "string"
-        },
-        "conversation_id": {
           "type": "string"
         },
         "tags": {
@@ -54,11 +47,6 @@
         },
         "ingest_reason": {
           "$ref": "#/$defs/ingest_reason"
-        },
-        "skip_memory": {
-          "type": "boolean",
-          "default": false,
-          "description": "When true, ingest_turn returns skipped and does not write durable memory."
         }
       }
     }

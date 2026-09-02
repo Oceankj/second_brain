@@ -12,20 +12,4 @@ class IngestPolicyDecision:
 
 
 def evaluate_ingest_policy(metadata: IngestTurnMetadata) -> IngestPolicyDecision:
-    if metadata.skip_memory:
-        return IngestPolicyDecision(
-            should_ingest=False,
-            reason="metadata.skip_memory=true",
-        )
-
-    if metadata.ingest_reason is None:
-        return IngestPolicyDecision(
-            should_ingest=False,
-            reason=(
-                "metadata.ingest_reason is required; use one of task_completed, "
-                "explicit_memory_request, user_preference, stable_fact, "
-                "personal_insight, decision, stable_artifact, manual_import"
-            ),
-        )
-
     return IngestPolicyDecision(should_ingest=True)

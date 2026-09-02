@@ -33,12 +33,8 @@ async def get_context(
     input: str,
     token: str,
     session_id: str | None = None,
-    memory_types: list[str] | None = None,
     diary_lookback_days: int | None = None,
-    limit: int = 10,
     max_context_chars: int = 6000,
-    include_links: bool = True,
-    link_expansion_depth: int = 1,
     include_chunks: bool = False,
 ) -> dict[str, Any]:
     """Retrieve compact durable memory context for the caller input."""
@@ -48,16 +44,12 @@ async def get_context(
         input=input,
         token=token,
         session_id=session_id,
-        memory_types=memory_types or ["note", "diary", "profile_memory"],
         diary_lookback_days=(
             settings.recent_diary_lookback_days
             if diary_lookback_days is None
             else diary_lookback_days
         ),
-        limit=limit,
         max_context_chars=max_context_chars,
-        include_links=include_links,
-        link_expansion_depth=link_expansion_depth,
         include_chunks=include_chunks,
     )
     return await get_memory_service().get_context(payload)

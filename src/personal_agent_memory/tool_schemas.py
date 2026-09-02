@@ -40,29 +40,19 @@ class GetContextInput(BaseModel):
     diary_lookback_days: int | None = Field(default=None, ge=0, le=7)
     limit: int = Field(default=10, ge=1, le=50)
     max_context_chars: int = Field(default=6000, ge=500, le=50000)
-    include_links: bool = True
     link_expansion_depth: int = Field(default=1, ge=0, le=2)
     include_chunks: bool = False
 
 
 class IngestTurnMetadata(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
 
     timestamp: datetime
     source: str = Field(min_length=1)
     app: str | None = None
-    user_id: str | None = Field(
-        default=None,
-        description=(
-            "Optional caller hint retained in metadata; "
-            "persisted user identity is resolved from token."
-        ),
-    )
     session_id: str | None = None
-    conversation_id: str | None = None
     tags: list[str] = Field(default_factory=list)
-    ingest_reason: IngestReason | None = None
-    skip_memory: bool = False
+    ingest_reason: IngestReason
 
 
 class IngestTurnInput(BaseModel):

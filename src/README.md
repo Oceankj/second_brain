@@ -85,24 +85,23 @@ personal_agent_memory/
 
 `MemoryService` delegates to `IngestionService.ingest_turn`, which then:
 
-1. Evaluates the ingest policy from `metadata.ingest_reason` / `skip_memory`.
-2. Returns `status=skipped` without writes when the turn is not durable memory.
-3. Extracts memory candidates with deterministic reason-based routing.
-4. Builds a durable memory body from user input and assistant output.
-5. Creates `memory_items` rows with `status = candidate`.
+1. Evaluates the ingest policy from required `metadata.ingest_reason`.
+2. Extracts memory candidates with deterministic reason-based routing.
+3. Builds a durable memory body from user input and assistant output.
+4. Creates `memory_items` rows with `status = candidate`.
    - `ingest_turn` does not infer `ingest_reason`; the caller must provide it.
    - All accepted turns currently create `note` candidates.
    - `ingest_reason` is stored on `memory_items` so daily maintenance can route
      candidates into note review, daily note generation, or profile update tasks.
-6. Splits each body into chunks.
-7. Embeds every chunk.
-8. Inserts `memory_chunks`.
-9. Normalizes metadata tags and upserts `tags`.
-10. Inserts `memory_item_tags`.
-11. Detects `[[wikilinks]]` in each body.
-12. Resolves matching titles and inserts `memory_links`.
-13. Inserts a `created` event into `memory_item_events` with candidate provenance.
-14. Returns an `ingest_turn.output` shaped response.
+5. Splits each body into chunks.
+6. Embeds every chunk.
+7. Inserts `memory_chunks`.
+8. Normalizes metadata tags and upserts `tags`.
+9. Inserts `memory_item_tags`.
+10. Detects `[[wikilinks]]` in each body.
+11. Resolves matching titles and inserts `memory_links`.
+12. Inserts a `created` event into `memory_item_events` with candidate provenance.
+13. Returns an `ingest_turn.output` shaped response.
 
 The current extraction strategy is intentionally simple: one interaction becomes one
 candidate note with a caller-provided `ingest_reason`. Later, this can become rule-based
@@ -120,12 +119,11 @@ or LLM-assisted extraction without changing the MCP tool boundary.
 4. Searches similar `tags.embedding` rows, loads tagged chunks, and scores them with the configured tag/chunk weight.
 5. Joins matching chunks back to `memory_items`.
 6. Deduplicates by memory item and ranks seed candidates.
-7. Expands outgoing links and backlinks from top seed items when `link_expansion_depth > 0`.
+7. Uses outgoing links and backlinks from top seed items for link expansion according to server retrieval policy.
 8. Ranks linked candidates in a separate lane, then quota-merges them with seed items.
 9. Writes `retrieved` events for returned items.
-10. Optionally loads outgoing links and backlinks for response serialization.
-11. Builds and truncates `compact_context` to `max_context_chars`.
-12. Returns a `get_context.output` shaped response.
+10. Builds and truncates `compact_context` to `max_context_chars`.
+11. Returns a `get_context.output` shaped response.
 
 The current version does not yet implement full-text search or reranking. Those belong after the P0 write/read path is proven.
 

@@ -65,16 +65,7 @@ class IngestionService:
         self.chunk_overlap_chars = chunk_overlap_chars
 
     async def ingest_turn(self, payload: IngestTurnInput, *, user_id: str) -> dict[str, Any]:
-        policy_decision = evaluate_ingest_policy(payload.metadata)
-        if not policy_decision.should_ingest:
-            return {
-                "status": "skipped",
-                "skip_reason": policy_decision.reason,
-                "candidate_items": [],
-                "tags": [],
-                "links": [],
-                "events": [],
-            }
+        evaluate_ingest_policy(payload.metadata)
 
         candidate_items = []
         all_tags = []
@@ -178,8 +169,6 @@ class IngestionService:
 
 def extract_memory_candidates(payload: IngestTurnInput) -> list[ExtractedMemoryCandidate]:
     reason = payload.metadata.ingest_reason
-    if reason is None:
-        return []
 
     return [
         ExtractedMemoryCandidate(
