@@ -10,7 +10,7 @@ docker_compose up -d db ollama
 
 attempt=1
 while [ "$attempt" -le 30 ]; do
-  if docker_compose exec -T db pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; then
+  if docker_compose exec -T db pg_isready -U "$LOCAL_POSTGRES_USER" -d "$LOCAL_POSTGRES_DB" >/dev/null 2>&1; then
     echo "PostgreSQL is ready."
     break
   fi

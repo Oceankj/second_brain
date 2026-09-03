@@ -19,22 +19,23 @@ The scripts load `.env` from the repository root when it exists. The relevant
 variables are:
 
 ```bash
-POSTGRES_DB=personal_agent_memory
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postgres
-POSTGRES_PORT=5432
-OLLAMA_PORT=11434
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/personal_agent_memory
+LOCAL_POSTGRES_DB=personal_agent_memory
+LOCAL_POSTGRES_USER=postgres
+LOCAL_POSTGRES_PASSWORD=postgres
+LOCAL_POSTGRES_PORT=5432
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_EMBEDDING_MODEL=qwen3-embedding:0.6b
 MEMORY_EMBEDDING_DIMENSION=1024
 ```
 
-`DATABASE_URL` is the database used by the MCP server. `POSTGRES_*` variables
-configure the local Compose database.
+`DATABASE_URL` is the database used by the MCP server. It can point at local
+Compose PostgreSQL, Supabase, or another PostgreSQL target.
 
-`OLLAMA_*` variables configure the local Compose Ollama service and runtime
-embedding provider.
+`LOCAL_POSTGRES_*` variables configure only the local Compose database.
+
+`OLLAMA_BASE_URL` and `OLLAMA_EMBEDDING_MODEL` configure the runtime embedding
+provider when using Ollama.
 
 ## Commands
 
@@ -50,8 +51,26 @@ Apply SQL migrations:
 scripts/db/migrate.sh
 ```
 
-`scripts/db/migrate.sh` passes `MEMORY_EMBEDDING_DIMENSION` into psql as the
-`embedding_dimension` variable. This controls the `memory_chunks.embedding`
+`scripts/db/migrate.sh` applies migrations to the local Compose database.
+
+Apply SQL migrations to the database pointed at by `DATABASE_URL`, such as
+Supabase:
+
+```bash
+scripts/db/migrate_url.sh
+```
+
+Supabase migration was verified on 2026-09-03 with
+`MEMORY_EMBEDDING_DIMENSION=1024`. The runner connected to the Supabase
+`postgres` database and applied `migrations/001_p0_schema.sql` successfully.
+
+`DATABASE_URL` must be a PostgreSQL connection string that starts with
+`postgresql://` or `postgres://`. Supabase project API URLs that start with
+`https://` are not database connection strings and cannot be used for
+migrations.
+
+Both migration commands pass `MEMORY_EMBEDDING_DIMENSION` into the migration as
+the `embedding_dimension` value. This controls the `memory_chunks.embedding`
 dimension for fresh table creation.
 
 You can confirm which value reached the migration by checking the migration
@@ -72,6 +91,17 @@ variable is absent.
 
 Use `scripts/db/doctor.sh` to compare that configured value with the actual
 database column type.
+
+Inspect the database pointed at by `DATABASE_URL`, such as Supabase:
+
+```bash
+scripts/db/doctor_url.sh
+```
+
+Supabase doctor checks were verified on 2026-09-03. The script confirmed
+`pgcrypto`, `vector`, the memory tables, memory enum types, required indexes,
+and `vector(1024)` embedding columns on `memory_chunks.embedding` and
+`tags.embedding`.
 
 Re-running migrations does not change the dimension of an existing
 `memory_chunks.embedding` column. Changing embedding models across dimensions

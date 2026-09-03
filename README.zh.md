@@ -36,6 +36,11 @@ cp memory.example.json memory.json
 預設使用本機 Ollama embeddings：
 
 ```dotenv
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/personal_agent_memory
+LOCAL_POSTGRES_DB=personal_agent_memory
+LOCAL_POSTGRES_USER=postgres
+LOCAL_POSTGRES_PASSWORD=postgres
+LOCAL_POSTGRES_PORT=5432
 MEMORY_REST_API_ENABLED=false
 MEMORY_DEFAULT_USER_TOKEN=replace-with-a-random-token-at-least-32-chars
 OLLAMA_BASE_URL=http://localhost:11434
@@ -43,7 +48,7 @@ OLLAMA_EMBEDDING_MODEL=qwen3-embedding:0.6b
 MEMORY_EMBEDDING_DIMENSION=1024
 ```
 
-`.env` 主要保存 runtime environment、service connection 與 secrets，例如 `DATABASE_URL`、`MEMORY_DEFAULT_USER_TOKEN`、`OLLAMA_BASE_URL`、`OLLAMA_EMBEDDING_MODEL`。非 secret 的 memory 行為參數放在 `memory.json`，例如 chunking：
+`.env` 主要保存 runtime environment、service connection 與 secrets，例如 `DATABASE_URL`、`MEMORY_DEFAULT_USER_TOKEN`、`OLLAMA_BASE_URL`、`OLLAMA_EMBEDDING_MODEL`。`DATABASE_URL` 是 MCP runtime 實際使用的 database；`LOCAL_POSTGRES_*` 只用來設定本機 Docker Compose database。非 secret 的 memory 行為參數放在 `memory.json`，例如 chunking：
 
 ```json
 {
@@ -96,6 +101,12 @@ scripts/infra/up.sh
 scripts/db/migrate.sh
 ```
 
+`scripts/db/migrate.sh` 會套用到本機 Docker Compose database。如果要套用到 `DATABASE_URL` 指向的 database，例如 Supabase，使用：
+
+```bash
+scripts/db/migrate_url.sh
+```
+
 啟動 stdio MCP server 給外層 agent runtime：
 
 ```bash
@@ -124,12 +135,26 @@ http://localhost:11434
 
 如果你已經有自己的 Docker PostgreSQL 或其他 local PostgreSQL，這個 Compose service 不是必要的；把 `DATABASE_URL` 指到你的 database，然後用你的 migration 流程套 [migrations/001_p0_schema.sql](migrations/001_p0_schema.sql)。細節見 [scripts/db/README.md](scripts/db/README.md)。
 
+### Supabase migration status
+
+2026-09-03 已用 `scripts/db/migrate_url.sh` 驗證可連到 Supabase Postgres，並成功套用 `migrations/001_p0_schema.sql`。當時 `MEMORY_EMBEDDING_DIMENSION=1024`，migration target database 為 Supabase 的 `postgres` database。
+
+注意：`DATABASE_URL` 必須是 Postgres connection string，例如 `postgresql://...` 或 `postgres://...`；Supabase project API URL，也就是 `https://<project-ref>.supabase.co`，不能拿來跑 database migration。
+
+同日也已用 `scripts/db/doctor_url.sh` 驗證 Supabase schema 狀態：`pgcrypto`、`vector`、memory tables、memory enum types、required indexes 都存在，且 `memory_chunks.embedding` 與 `tags.embedding` 都是 `vector(1024)`。
+
 ## Verification
 
 檢查 DB extensions、tables 與欄位：
 
 ```bash
 scripts/db/doctor.sh
+```
+
+如果要檢查 `DATABASE_URL` 指向的 database，例如 Supabase，使用：
+
+```bash
+scripts/db/doctor_url.sh
 ```
 
 跑單元測試與 lint：
