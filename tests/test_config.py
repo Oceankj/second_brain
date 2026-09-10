@@ -156,6 +156,11 @@ def test_load_settings_uses_memory_json_for_chunking(
     monkeypatch.setenv("MEMORY_CHUNK_OVERLAP_CHARS", "111")
     (tmp_path / "memory.json").write_text(
         """{
+  "database": {
+    "pool_min_size": 2,
+    "pool_max_size": 12,
+    "pool_timeout_seconds": 15
+  },
   "chunking": {
     "max_chars": 2400,
     "overlap_chars": 240
@@ -219,6 +224,9 @@ def test_load_settings_uses_memory_json_for_chunking(
 
     settings = load_settings()
 
+    assert settings.database_pool_min_size == 2
+    assert settings.database_pool_max_size == 12
+    assert settings.database_pool_timeout_seconds == 15
     assert settings.embedding_provider == "cloudflare"
     assert settings.embedding_dimension == 1024
     assert settings.ollama_embedding_model == "qwen3-embedding:0.6b"
@@ -355,6 +363,15 @@ def test_settings_rejects_invalid_chunk_overlap() -> None:
             database_url="postgresql://example",
             max_chunk_chars=100,
             chunk_overlap_chars=100,
+        )
+
+
+def test_settings_rejects_invalid_database_pool_size() -> None:
+    with pytest.raises(ValueError, match="database_pool_min_size"):
+        Settings(
+            database_url="postgresql://example",
+            database_pool_min_size=5,
+            database_pool_max_size=4,
         )
 
 

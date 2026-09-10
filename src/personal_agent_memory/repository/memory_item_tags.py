@@ -8,7 +8,7 @@ class MemoryItemTagsRepository:
         self._connect = connect
 
     async def attach(self, memory_item_id: str, tag_id: str) -> None:
-        async with await self._connect() as conn:
+        async with self._connect() as conn:
             await conn.execute(
                 """
                 insert into memory_item_tags (memory_item_id, tag_id)

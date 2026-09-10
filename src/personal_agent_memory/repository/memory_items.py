@@ -21,7 +21,7 @@ class MemoryItemsRepository:
         event_date: str | None = None,
         ingest_reason: str | None = None,
     ) -> dict[str, Any]:
-        async with await self._connect() as conn:
+        async with self._connect() as conn:
             row = await conn.execute(
                 """
                 insert into memory_items (
@@ -36,7 +36,7 @@ class MemoryItemsRepository:
             return dict(await row.fetchone())
 
     async def find_by_title(self, title: str, *, user_id: str) -> dict[str, Any] | None:
-        async with await self._connect() as conn:
+        async with self._connect() as conn:
             cursor = await conn.execute(
                 """
                 select id::text, user_id, type::text, ingest_reason, title, body, status::text,
@@ -54,7 +54,7 @@ class MemoryItemsRepository:
             return dict(row) if row else None
 
     async def find_diary_by_date(self, *, user_id: str, event_date: str) -> dict[str, Any] | None:
-        async with await self._connect() as conn:
+        async with self._connect() as conn:
             cursor = await conn.execute(
                 """
                 select id::text, user_id, type::text, ingest_reason, title, body, status::text,
@@ -81,7 +81,7 @@ class MemoryItemsRepository:
         ingest_reasons: list[str] | None = None,
         user_id: str | None = None,
     ) -> list[dict[str, Any]]:
-        async with await self._connect() as conn:
+        async with self._connect() as conn:
             cursor = await conn.execute(
                 """
                 select id::text, user_id, type::text, ingest_reason, title, body, status::text,
@@ -114,7 +114,7 @@ class MemoryItemsRepository:
         end_at: datetime,
         user_id: str,
     ) -> list[dict[str, Any]]:
-        async with await self._connect() as conn:
+        async with self._connect() as conn:
             cursor = await conn.execute(
                 """
                 select id::text, user_id, type::text, ingest_reason, title, body, status::text,
@@ -135,7 +135,7 @@ class MemoryItemsRepository:
         if not item_ids:
             return 0
 
-        async with await self._connect() as conn:
+        async with self._connect() as conn:
             result = await conn.execute(
                 """
                 update memory_items

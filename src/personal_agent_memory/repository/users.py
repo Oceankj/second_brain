@@ -10,7 +10,7 @@ class UsersRepository:
         self._connect = connect
 
     async def upsert(self, user_id: str, display_name: str | None = None) -> dict[str, Any]:
-        async with await self._connect() as conn:
+        async with self._connect() as conn:
             row = await conn.execute(
                 """
                 insert into users (id, display_name)
@@ -25,7 +25,7 @@ class UsersRepository:
             return dict(await row.fetchone())
 
     async def set_token_hash(self, user_id: str, token_hash: str) -> dict[str, Any] | None:
-        async with await self._connect() as conn:
+        async with self._connect() as conn:
             cursor = await conn.execute(
                 """
                 update users
@@ -40,7 +40,7 @@ class UsersRepository:
             return dict(user) if user else None
 
     async def find_by_token_hash(self, token_hash: str) -> dict[str, Any] | None:
-        async with await self._connect() as conn:
+        async with self._connect() as conn:
             cursor = await conn.execute(
                 """
                 select id, display_name, created_at, updated_at
@@ -53,7 +53,7 @@ class UsersRepository:
             return dict(user) if user else None
 
     async def get(self, user_id: str) -> dict[str, Any] | None:
-        async with await self._connect() as conn:
+        async with self._connect() as conn:
             row = await conn.execute(
                 """
                 select id, display_name, created_at, updated_at
@@ -66,7 +66,7 @@ class UsersRepository:
             return dict(user) if user else None
 
     async def list(self) -> list[dict[str, Any]]:
-        async with await self._connect() as conn:
+        async with self._connect() as conn:
             cursor = await conn.execute(
                 """
                 select id, display_name, created_at, updated_at
@@ -77,7 +77,7 @@ class UsersRepository:
             return [dict(row) for row in await cursor.fetchall()]
 
     async def update(self, user_id: str, display_name: str | None) -> dict[str, Any] | None:
-        async with await self._connect() as conn:
+        async with self._connect() as conn:
             cursor = await conn.execute(
                 """
                 update users

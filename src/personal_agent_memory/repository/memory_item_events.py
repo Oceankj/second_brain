@@ -20,7 +20,7 @@ class MemoryItemEventsRepository:
         session_id: str | None,
         metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        async with await self._connect() as conn:
+        async with self._connect() as conn:
             cursor = await conn.execute(
                 """
                 insert into memory_item_events (

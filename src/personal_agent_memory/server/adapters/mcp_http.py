@@ -12,27 +12,38 @@ from personal_agent_memory.server.auth.transport import (
     MemoryTokenVerifier,
     authenticated_bearer_token,
 )
-from personal_agent_memory.server.dependencies import get_settings
+from personal_agent_memory.server.dependencies import (
+    ApplicationContext,
+    create_application_context,
+    set_application_context,
+)
 from personal_agent_memory.server.tools.memory import (
     get_context_with_token,
     ingest_turn_with_token,
 )
 
 
-def create_mcp_http_server(settings: Settings | None = None) -> FastMCP:
-    settings = settings or get_settings()
+def create_mcp_http_server(
+    settings: Settings | None = None,
+    *,
+    context: ApplicationContext | None = None,
+) -> FastMCP:
+    context = context or create_application_context(settings)
+    settings = context.settings
+    set_application_context(context)
     server = FastMCP(
         "personal-agent-memory",
         host=settings.mcp_http_host,
         port=settings.mcp_http_port,
         streamable_http_path=settings.mcp_http_path,
         max_request_body_size=settings.mcp_http_max_request_body_size,
+        lifespan=context.lifespan,
         auth=AuthSettings(
             issuer_url=settings.mcp_http_public_url,
             resource_server_url=settings.mcp_http_public_url,
             required_scopes=MCP_HTTP_SCOPES,
         ),
-        token_verifier=MemoryTokenVerifier(),
+        token_verifier=MemoryTokenVerifier(context.user_service),
         transport_security=TransportSecuritySettings(
             enable_dns_rebinding_protection=True,
             allowed_hosts=list(settings.mcp_http_allowed_hosts),

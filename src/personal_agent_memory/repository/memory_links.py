@@ -16,7 +16,7 @@ class MemoryLinksRepository:
         target_id: str,
         link_type: str = "references",
     ) -> dict[str, Any] | None:
-        async with await self._connect() as conn:
+        async with self._connect() as conn:
             cursor = await conn.execute(
                 """
                 insert into memory_links (source_id, target_id, link_type)
@@ -38,7 +38,7 @@ class MemoryLinksRepository:
         if not item_ids:
             return {}
 
-        async with await self._connect() as conn:
+        async with self._connect() as conn:
             outgoing_cursor = await conn.execute(
                 """
                 select ml.id::text, ml.source_id::text, ml.target_id::text,

@@ -14,6 +14,9 @@ from personal_agent_memory.config.defaults import (
     DEFAULT_CLOUDFLARE_SUMMARY_TIMEOUT_SECONDS,
     DEFAULT_CLOUDFLARE_TIMEOUT_SECONDS,
     DEFAULT_DAILY_DIARY_TIMEZONE,
+    DEFAULT_DATABASE_POOL_MAX_SIZE,
+    DEFAULT_DATABASE_POOL_MIN_SIZE,
+    DEFAULT_DATABASE_POOL_TIMEOUT_SECONDS,
     DEFAULT_EMBEDDING_DIMENSION,
     DEFAULT_EMBEDDING_PROVIDER,
     DEFAULT_LINK_EXPANSION_MAX_ITEMS,
@@ -48,6 +51,9 @@ from personal_agent_memory.config.defaults import (
 @dataclass(frozen=True)
 class Settings:
     database_url: str
+    database_pool_min_size: int = DEFAULT_DATABASE_POOL_MIN_SIZE
+    database_pool_max_size: int = DEFAULT_DATABASE_POOL_MAX_SIZE
+    database_pool_timeout_seconds: float = DEFAULT_DATABASE_POOL_TIMEOUT_SECONDS
     rest_api_enabled: bool = False
     default_user_token: str | None = None
     embedding_provider: str = DEFAULT_EMBEDDING_PROVIDER
@@ -93,12 +99,23 @@ class Settings:
     mcp_http_max_request_body_size: int = DEFAULT_MCP_HTTP_MAX_REQUEST_BODY_SIZE
 
     def __post_init__(self) -> None:
+        self._validate_database()
         self._validate_embedding()
         self._validate_summary()
         self._validate_diary()
         self._validate_chunking()
         self._validate_retrieval()
         self._validate_mcp_http()
+
+    def _validate_database(self) -> None:
+        if self.database_pool_min_size < 0:
+            raise ValueError("database_pool_min_size cannot be negative")
+        if self.database_pool_max_size <= 0:
+            raise ValueError("database_pool_max_size must be positive")
+        if self.database_pool_min_size > self.database_pool_max_size:
+            raise ValueError("database_pool_min_size cannot exceed database_pool_max_size")
+        if self.database_pool_timeout_seconds <= 0:
+            raise ValueError("database_pool_timeout_seconds must be positive")
 
     def _validate_embedding(self) -> None:
         if self.embedding_provider not in EMBEDDING_PROVIDERS:

@@ -4,12 +4,18 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from personal_agent_memory.server.dependencies import get_application_context
 from personal_agent_memory.server.tools.memory import (
     get_context_with_token,
     ingest_turn_with_token,
 )
 
-mcp = FastMCP("personal-agent-memory")
+
+def application_lifespan(server: FastMCP):
+    return get_application_context().lifespan(server)
+
+
+mcp = FastMCP("personal-agent-memory", lifespan=application_lifespan)
 
 
 @mcp.tool()

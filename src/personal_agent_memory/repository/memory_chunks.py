@@ -20,7 +20,7 @@ class MemoryChunksRepository:
         embedding: list[float],
         token_count: int | None,
     ) -> dict[str, Any]:
-        async with await self._connect() as conn:
+        async with self._connect() as conn:
             row = await conn.execute(
                 """
                 insert into memory_chunks (
@@ -42,7 +42,7 @@ class MemoryChunksRepository:
         memory_types: list[str],
         limit: int,
     ) -> list[dict[str, Any]]:
-        async with await self._connect() as conn:
+        async with self._connect() as conn:
             cursor = await conn.execute(
                 """
                 select
@@ -90,7 +90,7 @@ class MemoryChunksRepository:
         if limit <= 0:
             return []
 
-        async with await self._connect() as conn:
+        async with self._connect() as conn:
             cursor = await conn.execute(
                 """
                 select
@@ -145,7 +145,7 @@ class MemoryChunksRepository:
         scores = [float(tag_scores[tag_id]) for tag_id in tag_ids]
         chunk_weight = 1 - tag_weight
 
-        async with await self._connect() as conn:
+        async with self._connect() as conn:
             cursor = await conn.execute(
                 """
                 with matched_tags(tag_id, tag_score) as (
@@ -245,7 +245,7 @@ class MemoryChunksRepository:
         source_scores = [float(item_source_scores[item_id]) for item_id in item_ids]
         chunk_weight = 1 - source_weight
 
-        async with await self._connect() as conn:
+        async with self._connect() as conn:
             cursor = await conn.execute(
                 """
                 with linked_items(item_id, source_score) as (

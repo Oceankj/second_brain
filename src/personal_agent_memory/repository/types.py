@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager
 
 import psycopg
 
-Connect = Callable[[], Awaitable[psycopg.AsyncConnection]]
+Connect = Callable[[], AbstractAsyncContextManager[psycopg.AsyncConnection]]

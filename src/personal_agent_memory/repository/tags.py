@@ -16,7 +16,7 @@ class TagsRepository:
         description: str | None = None,
         embedding: list[float] | None = None,
     ) -> dict[str, Any]:
-        async with await self._connect() as conn:
+        async with self._connect() as conn:
             row = await conn.execute(
                 """
                 insert into tags (name, description, embedding)
@@ -40,7 +40,7 @@ class TagsRepository:
         if limit <= 0:
             return []
 
-        async with await self._connect() as conn:
+        async with self._connect() as conn:
             cursor = await conn.execute(
                 """
                 select

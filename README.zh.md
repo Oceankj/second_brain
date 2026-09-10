@@ -51,6 +51,11 @@ CLOUDFLARE_API_TOKEN=
 
 ```json
 {
+  "database": {
+    "pool_min_size": 1,
+    "pool_max_size": 10,
+    "pool_timeout_seconds": 30
+  },
   "chunking": {
     "max_chars": 1800,
     "overlap_chars": 200

@@ -1,18 +1,24 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.provider import AccessToken
 
 from personal_agent_memory.server.dependencies import get_user_service
-from personal_agent_memory.services.users import AuthenticationError
+from personal_agent_memory.services.users import AuthenticationError, UserService
 
 MCP_HTTP_SCOPES = ["memory:read", "memory:write"]
 
 
 class MemoryTokenVerifier:
+    def __init__(self, user_service_factory: Callable[[], UserService] | None = None) -> None:
+        self._user_service_factory = user_service_factory
+
     async def verify_token(self, token: str) -> AccessToken | None:
         try:
-            user = await get_user_service().authenticate_token(token)
+            user_service_factory = self._user_service_factory or get_user_service
+            user = await user_service_factory().authenticate_token(token)
         except AuthenticationError:
             return None
 
