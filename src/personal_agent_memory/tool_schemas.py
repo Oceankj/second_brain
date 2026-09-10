@@ -67,6 +67,18 @@ class IngestTurnInput(BaseModel):
     metadata: IngestTurnMetadata
 
 
+class CreateDailyDiaryInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    token: str = Field(
+        min_length=1,
+        description="API token used to authenticate the caller and resolve user identity.",
+    )
+    date: date
+    dry_run: bool = False
+    force: bool = False
+
+
 def json_datetime(value: Any) -> str | None:
     if value is None:
         return None

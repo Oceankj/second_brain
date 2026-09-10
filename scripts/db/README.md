@@ -24,9 +24,6 @@ LOCAL_POSTGRES_DB=personal_agent_memory
 LOCAL_POSTGRES_USER=postgres
 LOCAL_POSTGRES_PASSWORD=postgres
 LOCAL_POSTGRES_PORT=5432
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_EMBEDDING_MODEL=qwen3-embedding:0.6b
-MEMORY_EMBEDDING_DIMENSION=1024
 ```
 
 `DATABASE_URL` is the database used by the MCP server. It can point at local
@@ -34,8 +31,10 @@ Compose PostgreSQL, Supabase, or another PostgreSQL target.
 
 `LOCAL_POSTGRES_*` variables configure only the local Compose database.
 
-`OLLAMA_BASE_URL` and `OLLAMA_EMBEDDING_MODEL` configure the runtime embedding
-provider when using Ollama.
+Runtime embedding behavior is configured in `memory.json`, not `.env`.
+`embedding.provider` selects `ollama` or `cloudflare`, and
+`embedding.dimension` controls the pgvector column dimension for fresh database
+creation.
 
 ## Commands
 
@@ -60,8 +59,8 @@ Supabase:
 scripts/db/migrate_url.sh
 ```
 
-Supabase migration was verified on 2026-09-03 with
-`MEMORY_EMBEDDING_DIMENSION=1024`. The runner connected to the Supabase
+Supabase migration was verified on 2026-09-03 with an embedding dimension of
+1024. The runner connected to the Supabase
 `postgres` database and applied `migrations/001_p0_schema.sql` successfully.
 
 `DATABASE_URL` must be a PostgreSQL connection string that starts with
@@ -69,25 +68,25 @@ Supabase migration was verified on 2026-09-03 with
 `https://` are not database connection strings and cannot be used for
 migrations.
 
-Both migration commands pass `MEMORY_EMBEDDING_DIMENSION` into the migration as
-the `embedding_dimension` value. This controls the `memory_chunks.embedding`
-dimension for fresh table creation.
+Both migration commands pass `memory.json`'s `embedding.dimension` into the
+migration as the `embedding_dimension` value. This controls the
+`memory_chunks.embedding` dimension for fresh table creation.
 
 You can confirm which value reached the migration by checking the migration
 output:
 
 ```bash
-MEMORY_EMBEDDING_DIMENSION=777 scripts/db/migrate.sh
+scripts/db/migrate.sh
 ```
 
 The migration should print:
 
 ```text
-Using embedding_dimension=777
+Using embedding_dimension=1024
 ```
 
-Without the override, it should print the value from `.env`, or `1024` when the
-variable is absent.
+If `memory.json` has no `embedding.dimension`, the scripts fall back to legacy
+`MEMORY_EMBEDDING_DIMENSION`, or `1024` when that variable is absent.
 
 Use `scripts/db/doctor.sh` to compare that configured value with the actual
 database column type.

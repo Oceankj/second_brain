@@ -14,8 +14,8 @@ from mcp import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 from psycopg.rows import dict_row
 
-from personal_agent_memory.config import load_dotenv
-from personal_agent_memory.providers.embeddings import OllamaEmbeddingProvider
+from personal_agent_memory.config import load_settings
+from personal_agent_memory.server.dependencies import build_embedding_provider
 
 ROOT = Path(__file__).resolve().parents[1]
 REQUIRED_LINK_TYPES = {"references"}
@@ -23,31 +23,28 @@ REQUIRED_TOOLS = {"ingest_turn", "get_context"}
 
 
 async def main() -> int:
-    load_dotenv(ROOT / ".env")
+    os.chdir(ROOT)
 
-    database_url = os.environ.get("DATABASE_URL")
-    if not database_url:
-        print("FAIL: DATABASE_URL is not set. Copy .env.example to .env first.", file=sys.stderr)
+    try:
+        settings = load_settings()
+    except RuntimeError as exc:
+        print(f"FAIL: {exc}. Copy .env.example to .env first.", file=sys.stderr)
+        return 2
+    except ValueError as exc:
+        print(f"FAIL: {exc}", file=sys.stderr)
         return 2
 
-    embedding_dimension = int(os.environ.get("MEMORY_EMBEDDING_DIMENSION", "1024"))
-    ollama_base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
-    ollama_model = os.environ.get("OLLAMA_EMBEDDING_MODEL", "qwen3-embedding:0.6b")
-    ollama_timeout = float(os.environ.get("OLLAMA_TIMEOUT_SECONDS", "30"))
-    default_user_token = os.environ.get("MEMORY_DEFAULT_USER_TOKEN")
-    if not default_user_token:
+    if not settings.default_user_token:
         print("FAIL: MEMORY_DEFAULT_USER_TOKEN is not set.", file=sys.stderr)
         return 2
 
     try:
-        await check_database(database_url, expected_embedding_dimension=embedding_dimension)
-        await check_ollama_embedding(
-            base_url=ollama_base_url,
-            model=ollama_model,
-            dimension=embedding_dimension,
-            timeout_seconds=ollama_timeout,
+        await check_database(
+            settings.database_url,
+            expected_embedding_dimension=settings.embedding_dimension,
         )
-        await check_mcp_tool_calls(default_user_token)
+        await check_embedding_provider(settings)
+        await check_mcp_tool_calls(settings.default_user_token)
     except RuntimeError as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
         return 1
@@ -56,21 +53,13 @@ async def main() -> int:
     return 0
 
 
-async def check_ollama_embedding(
-    *,
-    base_url: str,
-    model: str,
-    dimension: int,
-    timeout_seconds: float,
-) -> None:
-    provider = OllamaEmbeddingProvider(
-        base_url=base_url,
-        model=model,
-        dimension=dimension,
-        timeout_seconds=timeout_seconds,
-    )
+async def check_embedding_provider(settings) -> None:
+    provider = build_embedding_provider(settings)
     await provider.embed_text("personal memory smoke test")
-    print(f"OK: Ollama embedding model is ready: {model} ({dimension} dimensions)")
+    print(
+        "OK: embedding provider is ready: "
+        f"{settings.embedding_provider} ({settings.embedding_dimension} dimensions)"
+    )
 
 
 async def check_database(database_url: str, *, expected_embedding_dimension: int) -> None:

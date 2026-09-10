@@ -4,7 +4,6 @@ import re
 from pathlib import Path
 
 import psycopg
-
 from url_env import MIGRATIONS_DIR, load_database_url_settings
 
 

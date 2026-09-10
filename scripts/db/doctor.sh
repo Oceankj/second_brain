@@ -31,7 +31,7 @@ docker_compose exec -T db \
 
 echo
 echo "Embedding dimension setting:"
-echo "MEMORY_EMBEDDING_DIMENSION=$MEMORY_EMBEDDING_DIMENSION"
+echo "embedding.dimension=$MEMORY_EMBEDDING_DIMENSION"
 
 echo
 echo "Memory columns:"

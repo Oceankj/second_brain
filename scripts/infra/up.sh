@@ -6,7 +6,11 @@ set -eu
 require_docker_compose
 warn_if_database_url_differs_from_compose
 
-docker_compose up -d db ollama
+if [ "$EMBEDDING_PROVIDER" = "ollama" ]; then
+  docker_compose up -d db ollama
+else
+  docker_compose up -d db
+fi
 
 attempt=1
 while [ "$attempt" -le 30 ]; do
@@ -25,22 +29,26 @@ if [ "$attempt" -gt 30 ]; then
   exit 1
 fi
 
-attempt=1
-while [ "$attempt" -le 30 ]; do
-  if docker_compose exec -T ollama ollama list >/dev/null 2>&1; then
-    echo "Ollama is ready."
-    break
+if [ "$EMBEDDING_PROVIDER" = "ollama" ]; then
+  attempt=1
+  while [ "$attempt" -le 30 ]; do
+    if docker_compose exec -T ollama ollama list >/dev/null 2>&1; then
+      echo "Ollama is ready."
+      break
+    fi
+
+    echo "Waiting for Ollama... ($attempt/30)"
+    attempt=$((attempt + 1))
+    sleep 1
+  done
+
+  if [ "$attempt" -gt 30 ]; then
+    echo "Ollama did not become ready in time." >&2
+    exit 1
   fi
 
-  echo "Waiting for Ollama... ($attempt/30)"
-  attempt=$((attempt + 1))
-  sleep 1
-done
-
-if [ "$attempt" -gt 30 ]; then
-  echo "Ollama did not become ready in time." >&2
-  exit 1
+  docker_compose run --rm ollama-pull
+  echo "Ollama embedding model is ready: $OLLAMA_EMBEDDING_MODEL"
+else
+  echo "Skipping Ollama startup for embedding provider: $EMBEDDING_PROVIDER"
 fi
-
-docker_compose run --rm ollama-pull
-echo "Ollama embedding model is ready: $OLLAMA_EMBEDDING_MODEL"

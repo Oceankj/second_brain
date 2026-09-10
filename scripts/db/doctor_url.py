@@ -3,9 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import psycopg
-
 from url_env import load_database_url_settings
-
 
 REQUIRED_EXTENSIONS = {"pgcrypto", "vector"}
 REQUIRED_TABLES = {
@@ -62,7 +60,9 @@ def main() -> None:
 
             installed_extensions = get_installed_extensions(cur)
             print_section("Installed extensions", installed_extensions)
-            failures.extend(missing_messages(REQUIRED_EXTENSIONS, installed_extensions, "extension"))
+            failures.extend(
+                missing_messages(REQUIRED_EXTENSIONS, installed_extensions, "extension")
+            )
 
             memory_tables = get_memory_tables(cur)
             print_section("Memory tables", memory_tables)

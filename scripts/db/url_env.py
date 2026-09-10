@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-
+from typing import Any
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 MIGRATIONS_DIR = ROOT_DIR / "migrations"
@@ -28,9 +30,9 @@ def load_database_url_settings() -> DatabaseUrlSettings:
             "with https:// cannot be used for database migrations or checks."
         )
 
-    embedding_dimension = int(os.environ.get("MEMORY_EMBEDDING_DIMENSION", "1024"))
+    embedding_dimension = load_embedding_dimension()
     if embedding_dimension <= 0:
-        raise SystemExit("MEMORY_EMBEDDING_DIMENSION must be positive")
+        raise SystemExit("embedding.dimension must be positive")
 
     return DatabaseUrlSettings(
         database_url=database_url,
@@ -52,3 +54,27 @@ def load_dotenv(path: Path) -> None:
         value = value.strip().strip('"').strip("'")
         if key and key not in os.environ:
             os.environ[key] = value
+
+
+def load_embedding_dimension() -> int:
+    memory_config = load_memory_config(ROOT_DIR / "memory.json")
+    embedding_config = memory_config.get("embedding", {})
+    if embedding_config is None:
+        embedding_config = {}
+    if not isinstance(embedding_config, Mapping):
+        raise SystemExit("memory.json embedding must be an object")
+
+    dimension = embedding_config.get("dimension")
+    if dimension is None:
+        dimension = os.environ.get("MEMORY_EMBEDDING_DIMENSION", "1024")
+    return int(dimension)
+
+
+def load_memory_config(path: Path) -> Mapping[str, Any]:
+    if not path.exists():
+        return {}
+
+    config = json.loads(path.read_text())
+    if not isinstance(config, Mapping):
+        raise SystemExit("memory.json root must be an object")
+    return config

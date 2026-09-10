@@ -109,7 +109,7 @@ create table memory_chunks (
 - `embedding`: pgvector embedding，用於 retrieval。
 - `token_count`: 用於 token budgeting 與未來 re-chunking。如果尚未計算，可以是 null。
 
-Vector dimension 應該要跟選定的 embedding model 一致。`scripts/db/migrate.sh` 會把 `MEMORY_EMBEDDING_DIMENSION` 傳給 migration 的 `embedding_dimension` psql variable；直接執行 migration 時預設為 `1024`。目前預設的 local Ollama `qwen3-embedding:0.6b` 使用 `1024` 維。
+Vector dimension 應該要跟選定的 embedding model 一致。`scripts/db/migrate.sh` 會把 `memory.json` 的 `embedding.dimension` 傳給 migration 的 `embedding_dimension` psql variable；如果 `memory.json` 沒有設定，會 fallback 到 legacy `MEMORY_EMBEDDING_DIMENSION`，最後預設為 `1024`。目前預設的 local Ollama `qwen3-embedding:0.6b` 和 Cloudflare `@cf/baai/bge-large-en-v1.5` 都使用 `1024` 維。
 
 注意：這只會影響 fresh table creation。既有 `memory_chunks.embedding` 欄位不會因為重跑 `create table if not exists` 自動改維度；更換維度需要新 migration 並重新 embedding existing chunks。
 

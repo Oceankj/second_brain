@@ -16,7 +16,7 @@
 - `get_context`: 在回答或工作前讀 durable memory。
 - `ingest_turn`: 在 turn 或 conversation 結束後寫 durable memory。
 
-因此 transport adapter 應該保持很薄：負責 tool/route registration、input model validation、呼叫 service，然後把結果回傳。
+HTTP maintenance endpoints，例如 daily diary creation，可以由 GitHub Action 或其他 scheduler 觸發。Transport adapter 應該保持很薄：負責 tool/route registration、input model validation、呼叫 service，然後把結果回傳。
 
 ### Vertical slice before optimization
 
@@ -35,7 +35,7 @@ P1 之後再處理 hash-based chunk reuse、full-text search、reranking、daily
 
 ### Replaceable providers
 
-目前 `providers/embeddings.py` 使用 `OllamaEmbeddingProvider` 作為 runtime embedding provider。Service layer 仍依賴 `EmbeddingProvider` protocol，讓測試可以注入 deterministic fake provider，而不是讓 production server 用 env 切換到測試 provider。
+目前 `providers/embeddings.py` 支援 `OllamaEmbeddingProvider` 與 `CloudflareEmbeddingProvider`，runtime 由 `memory.json` 的 `embedding.provider` 選擇。Service layer 仍依賴 `EmbeddingProvider` protocol，讓測試可以注入 deterministic fake provider，而不是讓 production server 用 env 切換到測試 provider。
 
 如果之後要支援其他 production embedding backend，應該新增明確的 provider 並符合這個 protocol：
 
@@ -55,15 +55,17 @@ personal_agent_memory/
   tool_schemas.py Pydantic models matching docs/schemas JSON Schema intent.
   server/
     mcp.py          FastMCP app and tool handlers.
-    restful.py      Small REST adapter for user CRUD.
+    restful.py      Small REST adapter for user CRUD and maintenance routes.
     dependencies.py Shared runtime wiring for adapters.
   repository/     PostgreSQL/pgvector persistence adapters by table.
   providers/
-    embeddings.py Embedding provider protocol and Ollama provider.
+    embeddings.py Embedding provider protocol, Ollama provider, and Cloudflare provider.
+    summaries.py  Summary provider protocol and Cloudflare provider.
   services/
     memory/
       service.py       Thin facade that composes memory use-case services.
       ingestion.py     ingest_turn use case.
+      daily_diary.py   Scheduled daily diary creation use case.
       chunking.py      Text chunking helpers used by ingestion.
       ingest_policy.py Deterministic ingest policy.
       markdown.py      Markdown memory rendering helpers.
@@ -131,7 +133,7 @@ The current version does not yet implement full-text search or reranking. Those 
 
 ### `server/mcp.py`
 
-Keep this as the transport adapter. It should know about FastMCP and input/output argument shapes, but should not grow business logic.
+Keep this as the stdio MCP transport adapter. It should know about FastMCP and input/output argument shapes, but should not grow business logic.
 
 Good responsibilities:
 
@@ -147,15 +149,52 @@ Avoid:
 - Ranking logic.
 - Provider-specific embedding code.
 
+### `server/mcp_http.py`
+
+This is the internal streamable HTTP remote MCP adapter. It exposes the same memory tool boundary as stdio MCP, but uses transport-level bearer auth from FastMCP instead of a `token` tool argument. The deployable public HTTP entrypoint is `server/http.py`.
+
+Good responsibilities:
+
+- Configure FastMCP streamable HTTP host, port, path, auth, and transport security.
+- Register HTTP MCP tool wrappers.
+- Read caller tokens from MCP auth context.
+- Delegate memory behavior to shared MCP tool helpers and services.
+
+Avoid:
+
+- Reimplementing MCP transport details.
+- Defining a second token database or auth policy.
+- Coupling HTTP MCP to REST maintenance routes.
+
+### `server/http.py`
+
+This is the deployable unified HTTP entrypoint. It creates the streamable HTTP MCP server and attaches REST maintenance routes to the same FastMCP/Starlette app so one container instance can serve `/mcp`, `/health`, user CRUD, and `/maintenance/daily-diary`. This should be the only HTTP console script used for deployment.
+
+Good responsibilities:
+
+- Compose existing HTTP adapters into one process.
+- Reuse `mcp_http` host, port, path, auth, and transport security settings.
+- Keep REST route behavior inside `server/restful.py`.
+
+Avoid:
+
+- Reimplementing REST handlers.
+- Running multiple web servers inside one process.
+- Changing memory service behavior for deployment convenience.
+
+### `server/auth.py`
+
+This module adapts project user tokens to MCP transport auth. `MemoryTokenVerifier` should reuse `UserService.authenticate_token()` so stdio MCP, REST, and remote MCP accept the same user token rules.
+
 ### `server/restful.py`
 
-This is the REST transport adapter. P0 keeps it focused on user CRUD so user management stays separate from MCP tool calls.
+This is the internal REST route adapter. It keeps user CRUD and scheduled maintenance routes separate from MCP tool calls, while leaving memory behavior in services. These routes are deployed through `server/http.py`.
 
 Good responsibilities:
 
 - Register REST routes.
 - Parse JSON request bodies.
-- Call `UserService`.
+- Call `UserService` / `MemoryService`.
 - Return JSON responses.
 
 Avoid:
@@ -287,14 +326,18 @@ Avoid:
 
 ### `providers/embeddings.py`
 
-This owns the embedding provider boundary. The runtime provider calls Ollama embeddings; tests can inject deterministic fakes through the same `EmbeddingProvider` protocol.
+This owns the embedding provider boundary. The runtime provider is selected by `memory.json` and currently supports Ollama and Cloudflare Workers AI embeddings; tests can inject deterministic fakes through the same `EmbeddingProvider` protocol.
 
 If the embedding dimension changes, update both:
 
-- `MEMORY_EMBEDDING_DIMENSION`
+- `memory.json`'s `embedding.dimension`
 - a fresh database, or a migration that changes `memory_chunks.embedding` and re-embeds chunks
 
 For an existing database, changing dimension requires a new migration and re-embedding existing chunks.
+
+### `providers/summaries.py`
+
+This owns the summary provider boundary. Daily diary generation uses `SummaryProvider`, not `EmbeddingProvider`, so summarization can move independently from retrieval embeddings. The first runtime implementation is Cloudflare Workers AI.
 
 ## Database Assumptions
 
@@ -313,10 +356,9 @@ The migration in `migrations/001_p0_schema.sql` follows the P0 DB spec:
 
 These are intentionally not in the first skeleton:
 
-- Real embedding provider.
 - Daily maintenance worker.
 - Candidate note consolidation.
-- Diary generation.
+- Automated scheduler wiring.
 - Profile memory stability detection.
 - Full-text search.
 - Reranking.

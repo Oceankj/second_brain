@@ -53,6 +53,25 @@ class MemoryItemsRepository:
             row = await cursor.fetchone()
             return dict(row) if row else None
 
+    async def find_diary_by_date(self, *, user_id: str, event_date: str) -> dict[str, Any] | None:
+        async with await self._connect() as conn:
+            cursor = await conn.execute(
+                """
+                select id::text, user_id, type::text, ingest_reason, title, body, status::text,
+                       event_date, created_at, updated_at
+                from memory_items
+                where user_id = %s
+                  and type = 'diary'
+                  and event_date = %s
+                  and status <> 'archived'
+                order by updated_at desc
+                limit 1
+                """,
+                (user_id, event_date),
+            )
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
     async def list_created_between(
         self,
         *,
@@ -85,6 +104,30 @@ class MemoryItemsRepository:
                     ingest_reasons,
                     ingest_reasons,
                 ),
+            )
+            return [dict(row) for row in await cursor.fetchall()]
+
+    async def list_daily_diary_sources(
+        self,
+        *,
+        start_at: datetime,
+        end_at: datetime,
+        user_id: str,
+    ) -> list[dict[str, Any]]:
+        async with await self._connect() as conn:
+            cursor = await conn.execute(
+                """
+                select id::text, user_id, type::text, ingest_reason, title, body, status::text,
+                       event_date, created_at, updated_at
+                from memory_items
+                where created_at >= %s
+                  and created_at < %s
+                  and user_id = %s
+                  and type <> 'diary'
+                  and status <> 'archived'
+                order by created_at asc
+                """,
+                (start_at, end_at, user_id),
             )
             return [dict(row) for row in await cursor.fetchall()]
 

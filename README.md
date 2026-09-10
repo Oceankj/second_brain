@@ -111,7 +111,7 @@ The expected flow will be:
 3. Copy `memory.example.json` to `memory.json`.
 4. Start PostgreSQL + pgvector and Ollama.
 5. Run database migrations.
-6. Start the stdio MCP server.
+6. Start the stdio MCP server locally, or the unified HTTP server for deployment.
 7. Run the smoke test against the real MCP tool boundary.
 
 For now, the Chinese README has the most complete local setup notes:

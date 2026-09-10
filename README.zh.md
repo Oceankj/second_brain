@@ -7,7 +7,7 @@
 
 ## Quick Start
 
-這條流程只涵蓋本機啟動：安裝依賴、啟動 PostgreSQL + pgvector 與 Ollama、套 schema、啟動 stdio MCP server。
+這條流程只涵蓋本機啟動：安裝依賴、啟動 PostgreSQL + pgvector，預設 embedding provider 為 Ollama，套 schema、啟動 stdio MCP server。
 
 安裝依賴：
 
@@ -33,7 +33,7 @@ cp .env.example .env
 cp memory.example.json memory.json
 ```
 
-預設使用本機 Ollama embeddings：
+預設使用本機 Ollama embeddings。`.env` 主要保存 runtime environment、service connection 與 secrets，例如 `DATABASE_URL`、`MEMORY_DEFAULT_USER_TOKEN`、Cloudflare API credentials。`DATABASE_URL` 是 MCP runtime 實際使用的 database；`LOCAL_POSTGRES_*` 只用來設定本機 Docker Compose database。
 
 ```dotenv
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/personal_agent_memory
@@ -43,18 +43,47 @@ LOCAL_POSTGRES_PASSWORD=postgres
 LOCAL_POSTGRES_PORT=5432
 MEMORY_REST_API_ENABLED=false
 MEMORY_DEFAULT_USER_TOKEN=replace-with-a-random-token-at-least-32-chars
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_EMBEDDING_MODEL=qwen3-embedding:0.6b
-MEMORY_EMBEDDING_DIMENSION=1024
+CLOUDFLARE_ACCOUNT_ID=
+CLOUDFLARE_API_TOKEN=
 ```
 
-`.env` 主要保存 runtime environment、service connection 與 secrets，例如 `DATABASE_URL`、`MEMORY_DEFAULT_USER_TOKEN`、`OLLAMA_BASE_URL`、`OLLAMA_EMBEDDING_MODEL`。`DATABASE_URL` 是 MCP runtime 實際使用的 database；`LOCAL_POSTGRES_*` 只用來設定本機 Docker Compose database。非 secret 的 memory 行為參數放在 `memory.json`，例如 chunking：
+非 secret 的 memory 行為參數放在 `memory.json`，包含 chunking、retrieval、embedding provider selector 與 summary provider：
 
 ```json
 {
   "chunking": {
     "max_chars": 1800,
     "overlap_chars": 200
+  },
+  "embedding": {
+    "provider": "ollama",
+    "dimension": 1024,
+    "ollama": {
+      "model": "qwen3-embedding:0.6b",
+      "base_url": "http://localhost:11434",
+      "timeout_seconds": 30
+    },
+    "cloudflare": {
+      "model": "@cf/baai/bge-large-en-v1.5",
+      "account_id_env": "CLOUDFLARE_ACCOUNT_ID",
+      "api_token_env": "CLOUDFLARE_API_TOKEN",
+      "timeout_seconds": 30
+    }
+  },
+  "summary": {
+    "provider": "cloudflare",
+    "source_max_chars": 24000,
+    "cloudflare": {
+      "model": "@cf/meta/llama-3.1-8b-instruct-fp8",
+      "account_id_env": "CLOUDFLARE_ACCOUNT_ID",
+      "api_token_env": "CLOUDFLARE_API_TOKEN",
+      "timeout_seconds": 60,
+      "max_tokens": 1200,
+      "temperature": 0.2
+    }
+  },
+  "daily_diary": {
+    "timezone": "America/Los_Angeles"
   },
   "retrieval": {
     "recent_diary_lookback_days": 2,
@@ -73,18 +102,18 @@ MEMORY_EMBEDDING_DIMENSION=1024
 
 `qwen3-embedding:0.6b` 預設搭配目前 schema 的 1024 維向量；如果改成其他模型或維度，DB schema 的 `memory_chunks.embedding vector(1024)` 也要一起調整。
 
-Migration 會讀 `.env` 的 `MEMORY_EMBEDDING_DIMENSION` 來建立 fresh database 的 vector 欄位。既有 database 不會被重跑 migration 自動改維度；換模型維度時需要 fresh DB 或另寫 migration。
+Migration 會讀 `memory.json` 的 `embedding.dimension` 來建立 fresh database 的 vector 欄位。既有 database 不會被重跑 migration 自動改維度；換模型維度時需要 fresh DB 或另寫 migration。
 
 可以從 migration output 確認實際傳入值：
 
 ```bash
-MEMORY_EMBEDDING_DIMENSION=777 scripts/db/migrate.sh
+scripts/db/migrate.sh
 ```
 
-如果 env override 有生效，會看到：
+如果 `memory.json` 設定 `embedding.dimension` 為 1024，會看到：
 
 ```text
-Using embedding_dimension=777
+Using embedding_dimension=1024
 ```
 
 啟動本機 infra：
@@ -93,7 +122,7 @@ Using embedding_dimension=777
 scripts/infra/up.sh
 ```
 
-這會啟動 PostgreSQL + pgvector、Ollama，並 pull `.env` 裡的 embedding model。你也可以直接用 `docker compose up -d` 起服務；第一次 pull model 會花比較久。
+這會啟動 PostgreSQL + pgvector。如果 `memory.json` 的 `embedding.provider` 是 `ollama`，也會啟動 Ollama 並 pull `embedding.ollama.model`；如果是 `cloudflare`，則略過 Ollama。
 
 套用 P0 database schema：
 
@@ -113,13 +142,57 @@ scripts/db/migrate_url.sh
 uv run personal-agent-memory
 ```
 
-啟動簡單 REST user API：
+啟動部署用 unified HTTP server，同一個 process 同時提供 `/mcp` remote MCP 與 REST maintenance routes：
 
 ```bash
-uv run personal-agent-memory-rest
+uv run personal-agent-memory-http
 ```
 
-REST API 預設關閉；需要先設定 `MEMORY_REST_API_ENABLED=true` 才會啟動。MCP tools 與 REST requests 都需要 token；MCP 使用 top-level `token` argument，REST 使用 `Authorization: Bearer <token>` 或 `X-Memory-Token` header。Token 只以 hash 形式寫入 DB。
+REST routes 預設關閉；需要先設定 `MEMORY_REST_API_ENABLED=true`。Remote MCP HTTP 預設也關閉；需要在 `memory.json` 設定 `mcp_http.enabled=true`。`personal-agent-memory-http` 需要兩者都開啟。stdio MCP tools 使用 top-level `token` argument；HTTP REST routes 使用 `Authorization: Bearer <token>` 或 `X-Memory-Token` header；remote MCP 使用 `Authorization: Bearer <token>` transport auth，不需要在 tool arguments 再傳 token。Token 只以 hash 形式寫入 DB。
+
+建立每日 diary：
+
+```bash
+curl -X POST http://127.0.0.1:8000/maintenance/daily-diary \
+  -H "Authorization: Bearer $MEMORY_DEFAULT_USER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"date":"2026-09-08","dry_run":false}'
+```
+
+這個 endpoint 會用 `daily_diary.timezone` 將指定日期換算成查詢範圍，讀該日期的 non-archived, non-diary memory items，呼叫 `memory.json` 的 `summary.provider` 產生 diary body，建立 `type=diary` 的 active memory item，再替 diary 建 chunks / embeddings / references links / `mentioned_in_diary` events。`dry_run=true` 會呼叫 summary provider 產生預覽，但不寫入 DB。若當天已經有未 archived diary，預設回傳 `already_exists`；`force=true` 會 archive 舊 diary 並重建。
+
+Remote MCP HTTP 的 `memory.json` 設定範例：
+
+```json
+{
+  "mcp_http": {
+    "enabled": true,
+    "host": "127.0.0.1",
+    "port": 8001,
+    "path": "/mcp",
+    "public_url": "http://127.0.0.1:8001",
+    "allowed_hosts": ["127.0.0.1:*", "localhost:*", "[::1]:*"],
+    "allowed_origins": [
+      "http://127.0.0.1:*",
+      "http://localhost:*",
+      "http://[::1]:*"
+    ],
+    "max_request_body_size": 4194304
+  }
+}
+```
+
+部署注意事項：
+
+- GitHub Action daily diary 排程建議打 REST endpoint，不需要繞 MCP。
+- Remote MCP 適合給遠端 agent runtime 讀寫 memory；不要裸開到 public internet。
+- Fly.io/container 部署使用 `uv run personal-agent-memory-http`，同一個 instance 同時服務 `/mcp` 和 `/maintenance/daily-diary`。
+- 如果只在本機或 tunnel 後面測試，維持 `host=127.0.0.1`。
+- 如果部署在 container/VPS 需要對外 bind，可把 `host` 改成 `0.0.0.0`，但 `public_url` 必須改成實際 HTTPS 網域，例如 `https://memory.example.com`。
+- `allowed_hosts` 要包含 client 實際送出的 Host header；放在 reverse proxy 後面時通常是你的公開網域。
+- `allowed_origins` 要包含瀏覽器型 MCP client 的 origin；純 server-to-server client 也建議保持收斂。
+- production 必須放在 TLS/reverse proxy/Cloudflare Access/Tailscale/SSH tunnel 這類邊界後面，並搭配 rate limit 與 access log。
+- Bearer token 使用既有 user token 規則，也就是 `MEMORY_DEFAULT_USER_TOKEN` 或 DB 裡已 seed 的 token；不要把 provider API keys 當成 MCP auth token。
 
 預設的 Docker Compose database URL 是：
 
@@ -127,7 +200,7 @@ REST API 預設關閉；需要先設定 `MEMORY_REST_API_ENABLED=true` 才會啟
 postgresql://postgres:postgres@localhost:5432/personal_agent_memory
 ```
 
-預設的 Ollama URL 是：
+`ollama` embedding provider 預設的 URL 是：
 
 ```text
 http://localhost:11434
@@ -137,7 +210,7 @@ http://localhost:11434
 
 ### Supabase migration status
 
-2026-09-03 已用 `scripts/db/migrate_url.sh` 驗證可連到 Supabase Postgres，並成功套用 `migrations/001_p0_schema.sql`。當時 `MEMORY_EMBEDDING_DIMENSION=1024`，migration target database 為 Supabase 的 `postgres` database。
+2026-09-03 已用 `scripts/db/migrate_url.sh` 驗證可連到 Supabase Postgres，並成功套用 `migrations/001_p0_schema.sql`。當時 embedding dimension 為 1024，migration target database 為 Supabase 的 `postgres` database。
 
 注意：`DATABASE_URL` 必須是 Postgres connection string，例如 `postgresql://...` 或 `postgres://...`；Supabase project API URL，也就是 `https://<project-ref>.supabase.co`，不能拿來跑 database migration。
 
@@ -170,16 +243,16 @@ uv run ruff check .
 uv run python scripts/smoke_test.py
 ```
 
-這個 smoke test 需要本機 Ollama 正在執行，且 `.env` 裡的 `OLLAMA_EMBEDDING_MODEL` 已可用。
+這個 smoke test 需要 `memory.json` 指定的 embedding provider 可用。`ollama` 模式需要本機 Ollama 正在執行且模型已 pull；`cloudflare` 模式需要 `.env` 裡有 `CLOUDFLARE_ACCOUNT_ID` 與 `CLOUDFLARE_API_TOKEN`。
 
 這個 smoke test 會：
 
 - 連到 `DATABASE_URL` 檢查必要 tables 與 `memory_link_type` enum。
-- 呼叫 Ollama `/api/embed`，確認 embedding model 可用且維度符合設定。
+- 呼叫目前設定的 embedding provider，確認 embedding model 可用且維度符合設定。
 - 用 MCP stdio client 啟動 `personal_agent_memory.server`。
 - `list_tools` 檢查 `ingest_turn` / `get_context`。
-- 呼叫帶有 `metadata.ingest_reason` 的 `ingest_turn`，透過 Ollama embeddings 寫入一筆 smoke memory。
-- 呼叫帶有 `max_context_chars` 的 `get_context`，透過 Ollama embeddings + pgvector retrieval 確認至少回傳一筆 item。
+- 呼叫帶有 `metadata.ingest_reason` 的 `ingest_turn`，透過目前設定的 embeddings 寫入一筆 smoke memory。
+- 呼叫帶有 `max_context_chars` 的 `get_context`，透過目前設定的 embeddings + pgvector retrieval 確認至少回傳一筆 item。
 
 ## Documentation Shape
 
@@ -220,11 +293,13 @@ Resources 與 prompts 先作為 MCP-first 設計邊界記錄；是否進入 P0 �
 ## FastMCP Skeleton
 
 目前實作骨架採用 Python FastMCP，MCP adapter 入口在 `src/personal_agent_memory/server/mcp.py`。
-簡單的 user CRUD REST adapter 位於 `src/personal_agent_memory/server/restful.py`，讓 user 管理和 MCP tool transport 分開。
+部署用 unified HTTP adapter 位於 `src/personal_agent_memory/server/http.py`，同一個 process 同時提供 `/mcp` remote MCP 與 REST maintenance routes。REST route handlers 保留在 `src/personal_agent_memory/server/restful.py`，MCP HTTP setup 保留在 `src/personal_agent_memory/server/mcp_http.py`，但公開啟動入口只使用 unified HTTP server。
 
-目前 runtime 使用 `src/personal_agent_memory/providers/embeddings.py` 的 Ollama embeddings provider。測試若需要 deterministic embeddings，應在 test code 裡注入 fake provider，不走 production server 設定。
+目前 runtime 使用 `memory.json` 的 `embedding.provider` 在 `src/personal_agent_memory/providers/embeddings.py` 裡的 Ollama 與 Cloudflare embeddings provider 之間切換。測試若需要 deterministic embeddings，應在 test code 裡注入 fake provider，不走 production server 設定。
 
-Runtime settings 由 `.env` 與 optional `memory.json` 組成；`memory.json` 用於非 secret 的 memory behavior settings。
+Daily diary summary 由獨立的 `SummaryProvider` layer 負責，目前支援 Cloudflare Workers AI，和 `EmbeddingProvider` 分開。Cloudflare embedding 與 summary 可以共用 `.env` 裡的 `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN`。
+
+Runtime settings 由 `.env` 與 optional `memory.json` 組成；`memory.json` 用於非 secret 的 memory behavior settings，`.env` 只放 database、tokens 與 provider credentials。
 
 ## Memory Source
 

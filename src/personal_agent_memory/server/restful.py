@@ -3,13 +3,19 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from pydantic import ValidationError
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
-from personal_agent_memory.server.dependencies import get_settings, get_user_service
+from personal_agent_memory.server.dependencies import (
+    get_memory_service,
+    get_settings,
+    get_user_service,
+)
 from personal_agent_memory.services.users import AuthenticationError
+from personal_agent_memory.tool_schemas import CreateDailyDiaryInput
 
 
 async def require_api_enabled_and_authenticated(request: Request) -> JSONResponse | None:
@@ -80,6 +86,24 @@ async def health(request: Request) -> JSONResponse:
     return JSONResponse({"status": "ok"})
 
 
+async def create_daily_diary(request: Request) -> JSONResponse:
+    if not get_settings().rest_api_enabled:
+        return JSONResponse({"error": "rest_api_disabled"}, status_code=404)
+
+    payload = await read_json_body(request)
+    payload["token"] = bearer_token(request)
+    try:
+        diary_input = CreateDailyDiaryInput(**payload)
+    except ValidationError as exc:
+        return JSONResponse({"error": "invalid_request", "details": exc.errors()}, status_code=400)
+
+    try:
+        result = await get_memory_service().create_daily_diary(diary_input)
+    except AuthenticationError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=401)
+    return JSONResponse(result)
+
+
 async def read_json_body(request: Request) -> dict[str, Any]:
     try:
         body = await request.json()
@@ -94,15 +118,7 @@ routes = [
     Route("/users/{user_id:str}", get_user, methods=["GET"]),
     Route("/users/{user_id:str}", upsert_user, methods=["PUT"]),
     Route("/users/{user_id:str}", update_user, methods=["PATCH"]),
+    Route("/maintenance/daily-diary", create_daily_diary, methods=["POST"]),
 ]
 
 app = Starlette(debug=False, routes=routes)
-
-
-def main() -> None:
-    import uvicorn
-
-    if not get_settings().rest_api_enabled:
-        raise SystemExit("REST API is disabled. Set MEMORY_REST_API_ENABLED=true to enable it.")
-
-    uvicorn.run("personal_agent_memory.server.restful:app", host="127.0.0.1", port=8000)

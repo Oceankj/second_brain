@@ -1,7 +1,7 @@
 import pytest
 
 from personal_agent_memory.config import Settings
-from personal_agent_memory.server import mcp
+from personal_agent_memory.server import mcp, mcp_tools
 
 
 class FakeMemoryService:
@@ -19,14 +19,14 @@ async def test_get_context_uses_configured_recent_diary_default(
 ) -> None:
     fake_service = FakeMemoryService()
     monkeypatch.setattr(
-        mcp,
+        mcp_tools,
         "get_settings",
         lambda: Settings(
             database_url="postgresql://example",
             recent_diary_lookback_days=4,
         ),
     )
-    monkeypatch.setattr(mcp, "get_memory_service", lambda: fake_service)
+    monkeypatch.setattr(mcp_tools, "get_memory_service", lambda: fake_service)
 
     result = await mcp.get_context("continue memory work", "test-token")
 
@@ -44,8 +44,8 @@ async def test_get_context_call_can_override_recent_diary_default(
         database_url="postgresql://example",
         recent_diary_lookback_days=4,
     )
-    monkeypatch.setattr(mcp, "get_settings", lambda: settings)
-    monkeypatch.setattr(mcp, "get_memory_service", lambda: fake_service)
+    monkeypatch.setattr(mcp_tools, "get_settings", lambda: settings)
+    monkeypatch.setattr(mcp_tools, "get_memory_service", lambda: fake_service)
 
     result = await mcp.get_context(
         "continue memory work",

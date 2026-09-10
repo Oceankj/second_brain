@@ -15,7 +15,7 @@ dependencies = [
 
 [project.scripts]
 personal-agent-memory = "personal_agent_memory.server:main"
-personal-agent-memory-rest = "personal_agent_memory.server.restful:main"
+personal-agent-memory-http = "personal_agent_memory.server.http:main"
 
 [project.optional-dependencies]
 dev = [
