@@ -51,11 +51,18 @@ class EmbeddingProvider(Protocol):
 
 ```text
 personal_agent_memory/
-  config.py       Environment-backed runtime settings plus memory.json behavior config.
+  config/
+    __init__.py   Public Settings/load_settings facade.
+    defaults.py   Provider names, env var names, and default values.
+    loader.py     .env and memory.json loading.
+    models.py     Settings dataclass and validation.
+    parsing.py    JSON/env parsing helpers.
   tool_schemas.py Pydantic models matching docs/schemas JSON Schema intent.
   server/
-    mcp.py          FastMCP app and tool handlers.
-    restful.py      Small REST adapter for user CRUD and maintenance routes.
+    entrypoints/   Local stdio and deployable unified HTTP process entrypoints.
+    adapters/      FastMCP HTTP and REST route adapters.
+    auth/          Transport auth adapters.
+    tools/         MCP tool handlers shared by transports.
     dependencies.py Shared runtime wiring for adapters.
   repository/     PostgreSQL/pgvector persistence adapters by table.
   providers/

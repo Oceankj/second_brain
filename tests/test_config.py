@@ -131,6 +131,17 @@ def test_load_memory_config_reads_repo_local_json(tmp_path: Path) -> None:
     }
 
 
+def test_load_memory_config_uses_memory_config_path_env(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = tmp_path / "memory.production.json"
+    config_path.write_text("""{"chunking": {"max_chars": 3333}}""")
+    monkeypatch.setenv("MEMORY_CONFIG_PATH", str(config_path))
+
+    assert load_memory_config() == {"chunking": {"max_chars": 3333}}
+
+
 def test_load_settings_uses_memory_json_for_chunking(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
