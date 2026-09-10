@@ -292,8 +292,24 @@ Resources 與 prompts 先作為 MCP-first 設計邊界記錄；是否進入 P0 �
 
 ## FastMCP Skeleton
 
-目前實作骨架採用 Python FastMCP，MCP adapter 入口在 `src/personal_agent_memory/server/mcp.py`。
-部署用 unified HTTP adapter 位於 `src/personal_agent_memory/server/http.py`，同一個 process 同時提供 `/mcp` remote MCP 與 REST maintenance routes。REST route handlers 保留在 `src/personal_agent_memory/server/restful.py`，MCP HTTP setup 保留在 `src/personal_agent_memory/server/mcp_http.py`，但公開啟動入口只使用 unified HTTP server。
+目前實作骨架採用 Python FastMCP。`src/personal_agent_memory/server/` 只保留兩個公開入口，其餘檔案都是內部 adapter 或 wiring：
+
+```text
+server/
+  entrypoints/
+    stdio.py         local stdio MCP entrypoint
+    http.py          deployable unified HTTP entrypoint
+  adapters/
+    mcp_http.py      streamable HTTP MCP adapter setup
+    rest.py          REST route handlers for health/users/maintenance
+  auth/
+    transport.py     MCP HTTP bearer token verifier
+  tools/
+    memory.py        shared MCP tool-to-service handlers
+  dependencies.py    settings/repository/provider/service wiring
+```
+
+部署用 unified HTTP adapter 位於 `src/personal_agent_memory/server/entrypoints/http.py`，同一個 process 同時提供 `/mcp` remote MCP 與 REST maintenance routes。公開 HTTP 啟動入口只使用 unified HTTP server。
 
 目前 runtime 使用 `memory.json` 的 `embedding.provider` 在 `src/personal_agent_memory/providers/embeddings.py` 裡的 Ollama 與 Cloudflare embeddings provider 之間切換。測試若需要 deterministic embeddings，應在 test code 裡注入 fake provider，不走 production server 設定。
 

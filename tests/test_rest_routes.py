@@ -6,7 +6,7 @@ import pytest
 from starlette.requests import Request
 
 from personal_agent_memory.config import Settings
-from personal_agent_memory.server import restful
+from personal_agent_memory.server.adapters import rest
 
 
 class FakeMemoryService:
@@ -32,14 +32,14 @@ async def test_create_daily_diary_endpoint_uses_header_token(
 ) -> None:
     fake_service = FakeMemoryService()
     monkeypatch.setattr(
-        restful,
+        rest,
         "get_settings",
         lambda: Settings(
             database_url="postgresql://example",
             rest_api_enabled=True,
         ),
     )
-    monkeypatch.setattr(restful, "get_memory_service", lambda: fake_service)
+    monkeypatch.setattr(rest, "get_memory_service", lambda: fake_service)
 
     request = make_json_request(
         "/maintenance/daily-diary",
@@ -47,7 +47,7 @@ async def test_create_daily_diary_endpoint_uses_header_token(
         body={"date": "2026-09-08", "dry_run": True},
     )
 
-    response = await restful.create_daily_diary(request)
+    response = await rest.create_daily_diary(request)
 
     assert response.status_code == 200
     assert json.loads(response.body)["status"] == "preview"

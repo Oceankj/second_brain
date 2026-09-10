@@ -1,7 +1,8 @@
 import pytest
 
 from personal_agent_memory.config import Settings
-from personal_agent_memory.server import auth, mcp_http
+from personal_agent_memory.server.adapters import mcp_http
+from personal_agent_memory.server.auth import transport
 from personal_agent_memory.services.users import AuthenticationError
 
 
@@ -27,9 +28,9 @@ async def test_memory_token_verifier_reuses_user_service(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fake_service = FakeUserService()
-    monkeypatch.setattr(auth, "get_user_service", lambda: fake_service)
+    monkeypatch.setattr(transport, "get_user_service", lambda: fake_service)
 
-    access_token = await auth.MemoryTokenVerifier().verify_token("good-token")
+    access_token = await transport.MemoryTokenVerifier().verify_token("good-token")
 
     assert fake_service.tokens == ["good-token"]
     assert access_token is not None
@@ -43,30 +44,30 @@ async def test_memory_token_verifier_reuses_user_service(
 async def test_memory_token_verifier_rejects_invalid_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(auth, "get_user_service", lambda: FakeUserService())
+    monkeypatch.setattr(transport, "get_user_service", lambda: FakeUserService())
 
-    assert await auth.MemoryTokenVerifier().verify_token("bad-token") is None
+    assert await transport.MemoryTokenVerifier().verify_token("bad-token") is None
 
 
 def test_authenticated_bearer_token_reads_mcp_auth_context(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        auth,
+        transport,
         "get_access_token",
         lambda: type("AccessToken", (), {"token": "transport-token"})(),
     )
 
-    assert auth.authenticated_bearer_token() == "transport-token"
+    assert transport.authenticated_bearer_token() == "transport-token"
 
 
 def test_authenticated_bearer_token_requires_auth_context(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(auth, "get_access_token", lambda: None)
+    monkeypatch.setattr(transport, "get_access_token", lambda: None)
 
     with pytest.raises(AuthenticationError, match="missing_token"):
-        auth.authenticated_bearer_token()
+        transport.authenticated_bearer_token()
 
 
 def test_create_mcp_http_server_uses_http_settings() -> None:

@@ -1,7 +1,7 @@
 import pytest
 
 from personal_agent_memory.config import Settings
-from personal_agent_memory.server import http
+from personal_agent_memory.server.entrypoints import http
 
 
 def test_create_http_server_includes_mcp_and_rest_routes() -> None:

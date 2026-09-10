@@ -14,8 +14,8 @@ dependencies = [
 ]
 
 [project.scripts]
-personal-agent-memory = "personal_agent_memory.server:main"
-personal-agent-memory-http = "personal_agent_memory.server.http:main"
+personal-agent-memory = "personal_agent_memory.server.entrypoints.stdio:main"
+personal-agent-memory-http = "personal_agent_memory.server.entrypoints.http:main"
 
 [project.optional-dependencies]
 dev = [

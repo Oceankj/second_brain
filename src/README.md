@@ -131,16 +131,14 @@ The current version does not yet implement full-text search or reranking. Those 
 
 ## Boundaries
 
-### `server/mcp.py`
+### `server/entrypoints/stdio.py`
 
 Keep this as the stdio MCP transport adapter. It should know about FastMCP and input/output argument shapes, but should not grow business logic.
 
 Good responsibilities:
 
 - Register MCP tools.
-- Convert function args into Pydantic models.
-- Instantiate service from settings.
-- Return service results.
+- Delegate tool execution to `server/tools/memory.py`.
 
 Avoid:
 
@@ -149,9 +147,25 @@ Avoid:
 - Ranking logic.
 - Provider-specific embedding code.
 
-### `server/mcp_http.py`
+### `server/entrypoints/http.py`
 
-This is the internal streamable HTTP remote MCP adapter. It exposes the same memory tool boundary as stdio MCP, but uses transport-level bearer auth from FastMCP instead of a `token` tool argument. The deployable public HTTP entrypoint is `server/http.py`.
+This is the deployable unified HTTP entrypoint. It creates the streamable HTTP MCP server and attaches REST maintenance routes to the same FastMCP/Starlette app so one container instance can serve `/mcp`, `/health`, user CRUD, and `/maintenance/daily-diary`. This should be the only HTTP console script used for deployment.
+
+Good responsibilities:
+
+- Compose existing HTTP adapters into one process.
+- Reuse `mcp_http` host, port, path, auth, and transport security settings.
+- Keep REST route behavior inside `server/adapters/rest.py`.
+
+Avoid:
+
+- Reimplementing REST handlers.
+- Running multiple web servers inside one process.
+- Changing memory service behavior for deployment convenience.
+
+### `server/adapters/mcp_http.py`
+
+This is the internal streamable HTTP remote MCP adapter. It exposes the same memory tool boundary as stdio MCP, but uses transport-level bearer auth from FastMCP instead of a `token` tool argument. The deployable public HTTP entrypoint is `server/entrypoints/http.py`.
 
 Good responsibilities:
 
@@ -166,29 +180,29 @@ Avoid:
 - Defining a second token database or auth policy.
 - Coupling HTTP MCP to REST maintenance routes.
 
-### `server/http.py`
+### `server/tools/memory.py`
 
-This is the deployable unified HTTP entrypoint. It creates the streamable HTTP MCP server and attaches REST maintenance routes to the same FastMCP/Starlette app so one container instance can serve `/mcp`, `/health`, user CRUD, and `/maintenance/daily-diary`. This should be the only HTTP console script used for deployment.
+This module holds transport-independent MCP tool handlers. stdio MCP passes a token argument into these helpers; HTTP MCP resolves the bearer token first, then calls the same helpers.
 
 Good responsibilities:
 
-- Compose existing HTTP adapters into one process.
-- Reuse `mcp_http` host, port, path, auth, and transport security settings.
-- Keep REST route behavior inside `server/restful.py`.
+- Convert tool arguments into Pydantic input models.
+- Apply shared MCP defaults from settings.
+- Call `MemoryService`.
 
 Avoid:
 
-- Reimplementing REST handlers.
-- Running multiple web servers inside one process.
-- Changing memory service behavior for deployment convenience.
+- FastMCP decorators.
+- HTTP auth context handling.
+- REST request parsing.
 
-### `server/auth.py`
+### `server/auth/transport.py`
 
 This module adapts project user tokens to MCP transport auth. `MemoryTokenVerifier` should reuse `UserService.authenticate_token()` so stdio MCP, REST, and remote MCP accept the same user token rules.
 
-### `server/restful.py`
+### `server/adapters/rest.py`
 
-This is the internal REST route adapter. It keeps user CRUD and scheduled maintenance routes separate from MCP tool calls, while leaving memory behavior in services. These routes are deployed through `server/http.py`.
+This is the internal REST route adapter. It keeps user CRUD and scheduled maintenance routes separate from MCP tool calls, while leaving memory behavior in services. These routes are deployed through `server/entrypoints/http.py`.
 
 Good responsibilities:
 

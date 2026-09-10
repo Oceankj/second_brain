@@ -4,7 +4,10 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from personal_agent_memory.server.mcp_tools import get_context_with_token, ingest_turn_with_token
+from personal_agent_memory.server.tools.memory import (
+    get_context_with_token,
+    ingest_turn_with_token,
+)
 
 mcp = FastMCP("personal-agent-memory")
 

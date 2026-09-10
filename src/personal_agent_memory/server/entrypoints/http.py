@@ -6,15 +6,15 @@ from mcp.server.fastmcp import FastMCP
 from starlette.routing import Route
 
 from personal_agent_memory.config import Settings
-from personal_agent_memory.server import restful
+from personal_agent_memory.server.adapters.mcp_http import create_mcp_http_server
+from personal_agent_memory.server.adapters.rest import routes as rest_routes
 from personal_agent_memory.server.dependencies import get_settings
-from personal_agent_memory.server.mcp_http import create_mcp_http_server
 
 
 def create_http_server(settings: Settings | None = None) -> FastMCP:
     settings = settings or get_settings()
     server = create_mcp_http_server(settings)
-    register_rest_routes(server, restful.routes)
+    register_rest_routes(server, rest_routes)
     return server
 
 

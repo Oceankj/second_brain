@@ -7,13 +7,16 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
 from personal_agent_memory.config import Settings
-from personal_agent_memory.server.auth import (
+from personal_agent_memory.server.auth.transport import (
     MCP_HTTP_SCOPES,
     MemoryTokenVerifier,
     authenticated_bearer_token,
 )
 from personal_agent_memory.server.dependencies import get_settings
-from personal_agent_memory.server.mcp_tools import get_context_with_token, ingest_turn_with_token
+from personal_agent_memory.server.tools.memory import (
+    get_context_with_token,
+    ingest_turn_with_token,
+)
 
 
 def create_mcp_http_server(settings: Settings | None = None) -> FastMCP:
@@ -74,4 +77,3 @@ def register_authenticated_tools(server: FastMCP) -> None:
             max_context_chars=max_context_chars,
             include_chunks=include_chunks,
         )
-
