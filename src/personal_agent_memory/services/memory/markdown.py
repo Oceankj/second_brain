@@ -6,13 +6,12 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from personal_agent_memory.tool_schemas import (
+from personal_agent_memory.contracts import (
     IngestReason,
     MemoryItemStatus,
     MemoryItemType,
-    json_date,
-    json_datetime,
 )
+from personal_agent_memory.utils.serialization import json_date, json_datetime
 from personal_agent_memory.utils.text_processing import make_title, normalize_tags
 
 FRONT_MATTER_DELIMITER = "---"

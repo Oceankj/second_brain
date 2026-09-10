@@ -3,6 +3,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from personal_agent_memory.contracts import (
+    CreateDailyDiaryInput,
+    GetContextInput,
+    IngestTurnInput,
+)
 from personal_agent_memory.providers.embeddings import EmbeddingProvider
 from personal_agent_memory.providers.summaries import SummaryProvider
 from personal_agent_memory.repository import PostgresMemoryRepository
@@ -11,11 +16,6 @@ from personal_agent_memory.services.memory.ingestion import IngestionService
 from personal_agent_memory.services.memory.markdown import MarkdownService
 from personal_agent_memory.services.memory.retrieval import RetrievalConfig, RetrievalService
 from personal_agent_memory.services.users import UserService
-from personal_agent_memory.tool_schemas import (
-    CreateDailyDiaryInput,
-    GetContextInput,
-    IngestTurnInput,
-)
 
 
 class MemoryService:

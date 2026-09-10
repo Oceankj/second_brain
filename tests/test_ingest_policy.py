@@ -3,8 +3,8 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
+from personal_agent_memory.contracts import IngestTurnInput, IngestTurnMetadata
 from personal_agent_memory.services.memory.ingest_policy import evaluate_ingest_policy
-from personal_agent_memory.tool_schemas import IngestTurnInput, IngestTurnMetadata
 
 
 def make_metadata(**overrides: object) -> IngestTurnMetadata:

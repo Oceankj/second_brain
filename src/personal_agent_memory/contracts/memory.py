@@ -1,23 +1,10 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-MemoryItemType = Literal["note", "diary", "profile_memory"]
-MemoryItemStatus = Literal["candidate", "active", "archived"]
-MemoryLinkType = Literal["references"]
-IngestReason = Literal[
-    "task_completed",
-    "explicit_memory_request",
-    "user_preference",
-    "stable_fact",
-    "personal_insight",
-    "decision",
-    "stable_artifact",
-    "manual_import",
-]
+from personal_agent_memory.contracts.types import IngestReason, MemoryItemType
 
 
 class GetContextInput(BaseModel):
@@ -77,19 +64,3 @@ class CreateDailyDiaryInput(BaseModel):
     date: date
     dry_run: bool = False
     force: bool = False
-
-
-def json_datetime(value: Any) -> str | None:
-    if value is None:
-        return None
-    if isinstance(value, datetime):
-        return value.isoformat()
-    return str(value)
-
-
-def json_date(value: Any) -> str | None:
-    if value is None:
-        return None
-    if isinstance(value, date):
-        return value.isoformat()
-    return str(value)

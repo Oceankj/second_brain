@@ -5,8 +5,8 @@ from typing import Any
 
 import pytest
 
+from personal_agent_memory.contracts import CreateDailyDiaryInput
 from personal_agent_memory.services.memory.daily_diary import DailyDiaryService, utc_day_bounds
-from personal_agent_memory.tool_schemas import CreateDailyDiaryInput
 
 
 class FakeEmbeddingProvider:

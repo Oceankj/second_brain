@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from personal_agent_memory.tool_schemas import IngestTurnMetadata
+from personal_agent_memory.contracts import IngestTurnMetadata
 
 
 @dataclass(frozen=True)

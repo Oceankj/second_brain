@@ -9,13 +9,13 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
+from personal_agent_memory.contracts import CreateDailyDiaryInput
 from personal_agent_memory.server.dependencies import (
     get_memory_service,
     get_settings,
     get_user_service,
 )
 from personal_agent_memory.services.users import AuthenticationError
-from personal_agent_memory.tool_schemas import CreateDailyDiaryInput
 
 
 async def require_api_enabled_and_authenticated(request: Request) -> JSONResponse | None:

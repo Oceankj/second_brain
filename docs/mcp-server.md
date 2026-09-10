@@ -10,9 +10,9 @@ Personal Agent Memory MCP 是一個 durable memory server。它提供外層 agen
 - Link policy: retrieval expansion 與 ranking 使用 links 的方式，詳見 [mcp-links.md](mcp-links.md)。
 - Resources: client 可讀取的 context data，詳見 [mcp-resources.md](mcp-resources.md)。
 - Prompts: 可重用的 workflow template，詳見 [mcp-prompts.md](mcp-prompts.md)。
-- JSON Schema: tool input/output schema，位於 [schemas](schemas)。
+- JSON Schema: tool input/output documentation snapshots，位於 [schemas](schemas)。
 
-OpenAPI/Swagger 不是 canonical spec。若未來需要 HTTP gateway，應從 MCP tool schema 另外產生 adapter 文件。
+Runtime source of truth 是 `src/personal_agent_memory/contracts/` 裡的 Pydantic models。OpenAPI/Swagger 不是 canonical spec。若未來需要 machine-readable schema，應從 runtime contracts 產生，避免手維護兩份互相漂移的 spec。
 
 ## Runtime Boundary
 

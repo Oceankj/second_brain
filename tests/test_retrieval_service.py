@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 
+from personal_agent_memory.contracts import GetContextInput
 from personal_agent_memory.services.memory.retrieval import (
     RetrievalConfig,
     RetrievalService,
@@ -12,7 +13,6 @@ from personal_agent_memory.services.memory.retrieval import (
 from personal_agent_memory.services.memory.retrieval.policy import (
     build_retrieval_query,
 )
-from personal_agent_memory.tool_schemas import GetContextInput
 
 
 class FakeEmbeddingProvider:

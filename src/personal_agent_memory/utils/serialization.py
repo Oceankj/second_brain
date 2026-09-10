@@ -1,8 +1,7 @@
 from __future__ import annotations
 
+from datetime import date, datetime
 from typing import Any
-
-from personal_agent_memory.tool_schemas import json_date, json_datetime
 
 
 def serialize_item(
@@ -76,6 +75,22 @@ def build_compact_context(items: list[dict[str, Any]]) -> str:
     for item in items:
         blocks.append(f"[{item['type']}] {item['title']}\n{item['body']}")
     return "\n\n---\n\n".join(blocks)
+
+
+def json_datetime(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return str(value)
+
+
+def json_date(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, date):
+        return value.isoformat()
+    return str(value)
 
 
 # TODO: Use more elegant truncation strategy.

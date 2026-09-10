@@ -57,7 +57,9 @@ personal_agent_memory/
     loader.py     .env and memory.json loading.
     models.py     Settings dataclass and validation.
     parsing.py    JSON/env parsing helpers.
-  tool_schemas.py Pydantic models matching docs/schemas JSON Schema intent.
+  contracts/
+    memory.py      Pydantic use-case input contracts.
+    types.py       Shared memory literal types.
   server/
     entrypoints/   Local stdio and deployable unified HTTP process entrypoints.
     adapters/      FastMCP HTTP and REST route adapters.
@@ -90,7 +92,7 @@ personal_agent_memory/
 
 ### `ingest_turn`
 
-`server/mcp.py` receives MCP tool args and builds an `IngestTurnInput`.
+`server/entrypoints/stdio.py` receives MCP tool args and delegates to `server/tools/memory.py`, which builds an `IngestTurnInput`.
 
 `MemoryService` delegates to `IngestionService.ingest_turn`, which then:
 
@@ -118,7 +120,7 @@ or LLM-assisted extraction without changing the MCP tool boundary.
 
 ### `get_context`
 
-`server/mcp.py` receives MCP tool args and builds a `GetContextInput`.
+`server/entrypoints/stdio.py` receives MCP tool args and delegates to `server/tools/memory.py`, which builds a `GetContextInput`.
 
 `MemoryService` delegates to `RetrievalService.get_context`, which then:
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from personal_agent_memory.contracts import GetContextInput
 from personal_agent_memory.providers.embeddings import EmbeddingProvider
 from personal_agent_memory.repository import PostgresMemoryRepository
 from personal_agent_memory.services.memory.retrieval.policy import (
@@ -16,7 +17,6 @@ from personal_agent_memory.services.memory.retrieval.policy import (
     rank_chunk_rows,
     serialize_items,
 )
-from personal_agent_memory.tool_schemas import GetContextInput
 
 
 class RetrievalService:

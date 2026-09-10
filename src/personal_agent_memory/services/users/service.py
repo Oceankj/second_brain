@@ -5,7 +5,7 @@ import hmac
 from typing import Any
 
 from personal_agent_memory.repository import PostgresMemoryRepository
-from personal_agent_memory.tool_schemas import json_datetime
+from personal_agent_memory.utils.serialization import json_datetime
 
 DEFAULT_USER_ID = "0"
 DEFAULT_USER_DISPLAY_NAME = "Default User"

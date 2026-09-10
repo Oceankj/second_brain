@@ -262,7 +262,7 @@ uv run python scripts/smoke_test.py
 
 ## Documentation Shape
 
-這個 repo 採用 MCP-first 文件架構。Canonical spec 是 MCP primitives 與 JSON Schema，不是 Swagger/OpenAPI。
+這個 repo 採用 MCP-first 文件架構。Runtime 使用 `src/personal_agent_memory/contracts/` 的 Pydantic models 作為實際 contract；`docs/schemas/` 目前是對外文件用的 JSON Schema snapshot，不會被 runtime 讀取。之後若需要 machine-readable runtime schema，應由 Pydantic models 產生，避免手維護兩份 spec。
 
 - [MCP server overview](docs/mcp-server.md)
 - [MCP tools](docs/mcp-tools.md)

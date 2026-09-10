@@ -2,12 +2,12 @@ from datetime import UTC, datetime
 
 import pytest
 
+from personal_agent_memory.contracts import IngestReason, IngestTurnInput
 from personal_agent_memory.services.memory.ingestion import (
     created_event_metadata,
     extract_memory_candidates,
     memory_type_for_reason,
 )
-from personal_agent_memory.tool_schemas import IngestReason, IngestTurnInput
 
 
 def make_payload(ingest_reason: IngestReason) -> IngestTurnInput:

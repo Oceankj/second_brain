@@ -3,11 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from personal_agent_memory.contracts import IngestReason, IngestTurnInput, MemoryItemType
 from personal_agent_memory.providers.embeddings import EmbeddingProvider
 from personal_agent_memory.repository import PostgresMemoryRepository
 from personal_agent_memory.services.memory.chunking import chunk_text
 from personal_agent_memory.services.memory.ingest_policy import evaluate_ingest_policy
-from personal_agent_memory.tool_schemas import IngestReason, IngestTurnInput, MemoryItemType
 from personal_agent_memory.utils.serialization import (
     serialize_event,
     serialize_item,

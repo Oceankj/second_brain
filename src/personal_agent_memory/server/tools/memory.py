@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from personal_agent_memory.contracts import GetContextInput, IngestTurnInput
 from personal_agent_memory.server.dependencies import get_memory_service, get_settings
-from personal_agent_memory.tool_schemas import GetContextInput, IngestTurnInput
 
 
 async def ingest_turn_with_token(

@@ -6,11 +6,11 @@ from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from personal_agent_memory.contracts import CreateDailyDiaryInput
 from personal_agent_memory.providers.embeddings import EmbeddingProvider
 from personal_agent_memory.providers.summaries import SummaryProvider
 from personal_agent_memory.repository import PostgresMemoryRepository
 from personal_agent_memory.services.memory.chunking import chunk_text
-from personal_agent_memory.tool_schemas import CreateDailyDiaryInput
 from personal_agent_memory.utils.serialization import (
     serialize_event,
     serialize_item,

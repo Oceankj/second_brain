@@ -5,8 +5,8 @@ from typing import Any
 
 import pytest
 
+from personal_agent_memory.contracts import IngestTurnInput
 from personal_agent_memory.services.memory.ingestion import IngestionService
-from personal_agent_memory.tool_schemas import IngestTurnInput
 
 
 class FakeEmbeddingProvider:

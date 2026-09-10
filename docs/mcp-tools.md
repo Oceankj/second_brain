@@ -2,6 +2,8 @@
 
 P0 先實作兩個 tools：`get_context` 與 `ingest_turn`。
 
+Runtime input contracts live in `src/personal_agent_memory/contracts/`. The JSON Schema files linked below are documentation snapshots for external readers and should be regenerated from the runtime contracts if they become machine-read by clients.
+
 ## get_context
 
 根據使用者目前輸入，搜尋 durable memory stores，回傳精簡、可引用、可追溯的 context bundle。
