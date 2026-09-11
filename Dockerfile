@@ -9,19 +9,20 @@ ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
-    MEMORY_CONFIG_PATH=/app/memory.production.json \
+    MEMORY_CONFIG_PATH=/app/config/memory.json \
     MEMORY_REST_API_ENABLED=true \
     PORT=8001
 
 WORKDIR /app
 
-RUN useradd --create-home --shell /usr/sbin/nologin appuser
+RUN useradd --create-home --shell /usr/sbin/nologin appuser \
+    && mkdir -p /app/config
 
 COPY pyproject.toml uv.lock README.md README.zh.md ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 COPY src ./src
-COPY deploy/render/memory.json ./memory.production.json
+COPY deploy/render/memory.json ./config/memory.json
 RUN uv sync --frozen --no-dev
 
 USER appuser

@@ -108,7 +108,7 @@ CLOUDFLARE_API_TOKEN=
 預設會讀取 repo root 的 `memory.json`。部署時如果要使用不同 config 檔，可以設定：
 
 ```dotenv
-MEMORY_CONFIG_PATH=/app/config/memory.production.json
+MEMORY_CONFIG_PATH=/app/config/memory.json
 ```
 
 `qwen3-embedding:0.6b` 預設搭配目前 schema 的 1024 維向量；如果改成其他模型或維度，DB schema 的 `memory_chunks.embedding vector(1024)` 也要一起調整。

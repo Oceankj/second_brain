@@ -23,20 +23,32 @@ UV_CACHE_DIR=.uv-cache uv run python scripts/db/doctor_url.py
 UV_CACHE_DIR=.uv-cache uv run python scripts/db/migrate_url.py
 ```
 
-產生一組 memory API token：
+確認 repo root 的 private `.env` 已經有 `MEMORY_DEFAULT_USER_TOKEN`：
+
+```dotenv
+MEMORY_DEFAULT_USER_TOKEN=replace-with-a-random-token-at-least-32-chars
+```
+
+如果 `.env` 還沒有 token，才產生一組新的：
 
 ```bash
 openssl rand -hex 32
 ```
 
-## 2. 設定 Render config
+Render 和 GitHub Actions 要使用同一組 token；不要把 token 放進
+`memory.json` 或 `deploy/render/memory.json`。
 
-Docker image 會把 [deploy/render/memory.json](memory.json) 複製成 container 內的
-`/app/memory.production.json`。這份檔案是 Render deployment preset，不是本機
-private `memory.json`。
+## 2. 確認 Render preset
 
-部署前先把 [deploy/render/memory.json](memory.json) 裡的 `YOUR_RENDER_SERVICE`
-換成你的 Render service hostname，例如：
+Render 這個 deployment target 已經有一份 committed preset：
+[memory.json](memory.json)。一般情況下你不需要另外建立 config 檔；Docker
+build 會自動把這份檔案放到 container 內的 `/app/config/memory.json`。
+
+這份檔案會進 image，但不放 secrets；secrets 仍然透過 Render environment
+variables 提供。它也不是 repo root 的 private `/memory.json`。
+
+唯一通常需要改的是 `YOUR_RENDER_SERVICE`。如果你已經決定 Render service
+name，可以先把 [memory.json](memory.json) 裡的 hostname 換掉，例如：
 
 ```json
 {
@@ -51,6 +63,15 @@ private `memory.json`。
 Render 會用 `$PORT` 指定實際 listen port；runtime 會用 `$PORT` 覆蓋
 `mcp_http.port`。`mcp_http.host` 在 container 裡要保持 `0.0.0.0`。
 
+目前 config 分工是：
+
+```text
+memory.example.json          # general/local example
+/memory.json                 # local private runtime config, gitignored
+deploy/render/memory.json    # committed Render deployment preset
+Render env vars              # DATABASE_URL, tokens, Cloudflare credentials
+```
+
 ## 3. 本機 Docker 驗證
 
 Build image：
@@ -59,7 +80,7 @@ Build image：
 docker build -t personal-agent-memory .
 ```
 
-用本機 `.env` 和你自己的 config 檔啟動：
+用本機 `.env` 和 repo root 的 private `/memory.json` 啟動：
 
 ```bash
 docker run --rm \
@@ -67,8 +88,8 @@ docker run --rm \
   --env-file .env \
   -e PORT=8001 \
   -e MEMORY_REST_API_ENABLED=true \
-  -e MEMORY_CONFIG_PATH=/app/memory.production.json \
-  -v "$PWD/memory.json:/app/memory.production.json:ro" \
+  -e MEMORY_CONFIG_PATH=/app/config/memory.json \
+  -v "$PWD/memory.json:/app/config/memory.json:ro" \
   personal-agent-memory
 ```
 
@@ -114,9 +135,9 @@ curl http://localhost:8001/health
 
 ```dotenv
 DATABASE_URL=postgresql://...
-MEMORY_DEFAULT_USER_TOKEN=<openssl-rand-hex-32-output>
+MEMORY_DEFAULT_USER_TOKEN=<same-value-as-local-.env>
 MEMORY_REST_API_ENABLED=true
-MEMORY_CONFIG_PATH=/app/memory.production.json
+MEMORY_CONFIG_PATH=/app/config/memory.json
 CLOUDFLARE_ACCOUNT_ID=...
 CLOUDFLARE_API_TOKEN=...
 ```
@@ -172,6 +193,12 @@ jobs:
   create-diary:
     runs-on: ubuntu-latest
     steps:
+      - name: Warm up memory server
+        run: |
+          curl --fail-with-body "$MEMORY_SERVER_URL/health"
+        env:
+          MEMORY_SERVER_URL: ${{ secrets.MEMORY_SERVER_URL }}
+
       - name: Create daily diary
         run: |
           DATE="$(date -u -d 'yesterday' +%F)"
