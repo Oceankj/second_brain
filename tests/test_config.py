@@ -349,6 +349,27 @@ def test_load_settings_uses_mcp_http_defaults(
     )
 
 
+def test_load_settings_uses_platform_port_for_http_bind_port(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("DATABASE_URL", "postgresql://example")
+    monkeypatch.setenv("PORT", "4123")
+    (tmp_path / "memory.json").write_text(
+        """{
+  "mcp_http": {
+    "port": 9001
+  }
+}
+"""
+    )
+
+    settings = load_settings()
+
+    assert settings.mcp_http_port == 4123
+
+
 def test_settings_rejects_short_default_user_token() -> None:
     with pytest.raises(ValueError, match="default_user_token"):
         Settings(

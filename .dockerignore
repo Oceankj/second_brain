@@ -1,0 +1,24 @@
+.DS_Store
+.git
+.gitignore
+.pytest_cache
+.ruff_cache
+.uv-cache
+.venv
+__pycache__
+*.py[cod]
+
+.env
+.env.*
+!.env.example
+/memory.json
+
+build
+coverage
+dist
+logs
+tmp
+.tmp
+
+backups
+Architecture dfaft.drawio.html

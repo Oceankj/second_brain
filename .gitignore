@@ -14,7 +14,7 @@ Thumbs.db
 !.env.example
 
 # Local runtime behavior config
-memory.json
+/memory.json
 
 # Logs
 *.log

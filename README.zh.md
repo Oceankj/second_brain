@@ -197,7 +197,7 @@ Remote MCP HTTP 的 `memory.json` 設定範例：
 
 - GitHub Action daily diary 排程建議打 REST endpoint，不需要繞 MCP。
 - Remote MCP 適合給遠端 agent runtime 讀寫 memory；不要裸開到 public internet。
-- Fly.io/container 部署使用 `uv run personal-agent-memory-http`，同一個 instance 同時服務 `/mcp` 和 `/maintenance/daily-diary`。
+- Render/container 部署使用 `personal-agent-memory-http`，同一個 instance 同時服務 `/mcp` 和 `/maintenance/daily-diary`。第一版 Render Docker 操作手冊見 [deploy/render/README.md](deploy/render/README.md)。
 - 如果只在本機或 tunnel 後面測試，維持 `host=127.0.0.1`。
 - 如果部署在 container/VPS 需要對外 bind，可把 `host` 改成 `0.0.0.0`，但 `public_url` 必須改成實際 HTTPS 網域，例如 `https://memory.example.com`。
 - `allowed_hosts` 要包含 client 實際送出的 Host header；放在 reverse proxy 後面時通常是你的公開網域。
@@ -218,14 +218,6 @@ http://localhost:11434
 ```
 
 如果你已經有自己的 Docker PostgreSQL 或其他 local PostgreSQL，這個 Compose service 不是必要的；把 `DATABASE_URL` 指到你的 database，然後用你的 migration 流程套 [migrations/001_p0_schema.sql](migrations/001_p0_schema.sql)。細節見 [scripts/db/README.md](scripts/db/README.md)。
-
-### Supabase migration status
-
-2026-09-03 已用 `scripts/db/migrate_url.sh` 驗證可連到 Supabase Postgres，並成功套用 `migrations/001_p0_schema.sql`。當時 embedding dimension 為 1024，migration target database 為 Supabase 的 `postgres` database。
-
-注意：`DATABASE_URL` 必須是 Postgres connection string，例如 `postgresql://...` 或 `postgres://...`；Supabase project API URL，也就是 `https://<project-ref>.supabase.co`，不能拿來跑 database migration。
-
-同日也已用 `scripts/db/doctor_url.sh` 驗證 Supabase schema 狀態：`pgcrypto`、`vector`、memory tables、memory enum types、required indexes 都存在，且 `memory_chunks.embedding` 與 `tags.embedding` 都是 `vector(1024)`。
 
 ## Verification
 

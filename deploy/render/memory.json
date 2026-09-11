@@ -1,0 +1,63 @@
+{
+  "database": {
+    "pool_min_size": 0,
+    "pool_max_size": 3,
+    "pool_timeout_seconds": 30
+  },
+  "chunking": {
+    "max_chars": 1800,
+    "overlap_chars": 200
+  },
+  "embedding": {
+    "provider": "cloudflare",
+    "dimension": 1024,
+    "ollama": {
+      "model": "qwen3-embedding:0.6b",
+      "base_url": "http://localhost:11434",
+      "timeout_seconds": 30
+    },
+    "cloudflare": {
+      "model": "@cf/baai/bge-large-en-v1.5",
+      "account_id_env": "CLOUDFLARE_ACCOUNT_ID",
+      "api_token_env": "CLOUDFLARE_API_TOKEN",
+      "timeout_seconds": 30
+    }
+  },
+  "summary": {
+    "provider": "cloudflare",
+    "source_max_chars": 24000,
+    "cloudflare": {
+      "model": "@cf/meta/llama-3.1-8b-instruct-fp8",
+      "account_id_env": "CLOUDFLARE_ACCOUNT_ID",
+      "api_token_env": "CLOUDFLARE_API_TOKEN",
+      "timeout_seconds": 60,
+      "max_tokens": 1200,
+      "temperature": 0.2
+    }
+  },
+  "daily_diary": {
+    "timezone": "America/Los_Angeles"
+  },
+  "mcp_http": {
+    "enabled": true,
+    "host": "0.0.0.0",
+    "port": 8001,
+    "path": "/mcp",
+    "public_url": "https://YOUR_RENDER_SERVICE.onrender.com",
+    "allowed_hosts": ["YOUR_RENDER_SERVICE.onrender.com"],
+    "allowed_origins": ["https://YOUR_RENDER_SERVICE.onrender.com"],
+    "max_request_body_size": 4194304
+  },
+  "retrieval": {
+    "recent_diary_lookback_days": 2,
+    "recent_diary_max_items": 3,
+    "recent_diary_min_score": 0.72,
+    "recent_diary_max_chars": 2000,
+    "tag_retrieval_min_score": 0.72,
+    "tag_retrieval_max_tags": 5,
+    "tag_retrieval_tag_weight": 0.4,
+    "link_expansion_max_items": 3,
+    "link_expansion_source_limit": 5,
+    "link_expansion_source_weight": 0.4
+  }
+}

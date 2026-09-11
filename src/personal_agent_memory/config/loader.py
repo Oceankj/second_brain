@@ -55,6 +55,7 @@ from personal_agent_memory.config.defaults import (
     LEGACY_OLLAMA_EMBEDDING_MODEL_ENV,
     LEGACY_OLLAMA_TIMEOUT_SECONDS_ENV,
     MEMORY_CONFIG_PATH_ENV,
+    PORT_ENV,
     REST_API_ENABLED_ENV,
 )
 from personal_agent_memory.config.models import Settings
@@ -347,6 +348,11 @@ def load_retrieval_settings(memory_config: Mapping[str, Any]) -> dict[str, Any]:
 
 def load_mcp_http_settings(memory_config: Mapping[str, Any]) -> dict[str, Any]:
     mcp_http_config = config_section(memory_config, "mcp_http")
+    configured_port = config_int_from_section(
+        mcp_http_config,
+        key="port",
+        default=DEFAULT_MCP_HTTP_PORT,
+    )
     return {
         "mcp_http_enabled": config_bool_from_section(
             mcp_http_config,
@@ -359,9 +365,9 @@ def load_mcp_http_settings(memory_config: Mapping[str, Any]) -> dict[str, Any]:
             default=DEFAULT_MCP_HTTP_HOST,
         ),
         "mcp_http_port": config_int_from_section(
-            mcp_http_config,
-            key="port",
-            default=DEFAULT_MCP_HTTP_PORT,
+            {PORT_ENV: os.environ.get(PORT_ENV)},
+            key=PORT_ENV,
+            default=configured_port,
         ),
         "mcp_http_path": config_str(
             mcp_http_config,
