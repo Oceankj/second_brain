@@ -20,6 +20,11 @@ Thumbs.db
 *.log
 logs/
 
+# Local database dumps/backups
+backups/
+*.backup.sql
+*.dump
+
 # Dependencies
 node_modules/
 vendor/

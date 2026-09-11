@@ -8,7 +8,7 @@ P1 是 P0 跑通之後要優先處理的項目。它們會直接改善 retrieval
 
 ### Embedding 策略優化
 
-- 加入 content-addressed semantic chunks，讓 note 更新後，沒有改變的 chunks 可以沿用既有 embeddings。參考：[Hash vs Embedding 成本比較](docs/discussions/hash-vs-embedding-cost.md)。
+- 加入 content-addressed semantic chunks，讓 note 更新後，沒有改變的 chunks 可以沿用既有 embeddings。參考：[Hash vs Embedding 成本比較](../discussions/hash-vs-embedding-cost.md)。
 - 在 `memory_chunks` 加上 `content_hash`、`chunker_version`、`embedding_model`、`embedding_version`。
 - note 更新時，重新切 chunks，計算每個 chunk 的 hash，只針對 hash 改變的 chunks 重新 embedding。
 - 這是 embedding / retrieval 的優化，不是 storage 或 sync 系統。

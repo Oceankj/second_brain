@@ -267,8 +267,8 @@ uv run python scripts/smoke_test.py
 - [MCP resources](docs/mcp-resources.md)
 - [MCP prompts](docs/mcp-prompts.md)
 - [Lifecycle diagrams](docs/lifecycle.md)
-- [Database schema](DB.md)
-- [Future ideas](TODO.md)
+- [Database schema](docs/database/schema.md)
+- [Future ideas](docs/roadmap/TODO.md)
 
 OpenAPI/Swagger 只適合未來如果要做 HTTP gateway 或 REST adapter 時另外生成；目前不作為主文件。
 

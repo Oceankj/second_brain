@@ -34,7 +34,7 @@ Memory MCP 負責：
 
 ## Data Stores
 
-P0 使用 PostgreSQL + pgvector。主要資料表見 [DB.md](../DB.md)：
+P0 使用 PostgreSQL + pgvector。主要資料表見 [database schema](database/schema.md)：
 
 - `memory_items`
 - `memory_chunks`

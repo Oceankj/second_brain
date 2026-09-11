@@ -156,7 +156,7 @@ details live in:
 - [Source architecture](src/README.md)
 - [MCP server overview](docs/mcp-server.md)
 - [MCP tools](docs/mcp-tools.md)
-- [Database schema](DB.md)
+- [Database schema](docs/database/schema.md)
 - [Lifecycle diagrams](docs/lifecycle.md)
 
 ## Not Yet Done
@@ -172,4 +172,4 @@ Planned later work includes:
 - heat and importance scoring;
 - stronger provenance support.
 
-See [TODO.md](TODO.md) for the longer backlog.
+See [TODO](docs/roadmap/TODO.md) for the longer backlog.
