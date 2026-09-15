@@ -87,7 +87,6 @@ docker run --rm \
   -p 8001:8001 \
   --env-file .env \
   -e PORT=8001 \
-  -e MEMORY_REST_API_ENABLED=true \
   -e MEMORY_CONFIG_PATH=/app/config/memory.json \
   -v "$PWD/memory.json:/app/config/memory.json:ro" \
   personal-agent-memory
@@ -135,7 +134,6 @@ curl http://localhost:8001/health
 ```dotenv
 DATABASE_URL=postgresql://...
 MEMORY_DEFAULT_USER_TOKEN=<same-value-as-local-.env>
-MEMORY_REST_API_ENABLED=true
 MEMORY_ADMIN_API_ENABLED=false
 MEMORY_CONFIG_PATH=/app/config/memory.json
 CLOUDFLARE_ACCOUNT_ID=...

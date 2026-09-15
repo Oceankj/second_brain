@@ -87,9 +87,6 @@ async def health(request: Request) -> JSONResponse:
 
 
 async def create_daily_diary(request: Request) -> JSONResponse:
-    if not get_settings().rest_api_enabled:
-        return JSONResponse({"error": "rest_api_disabled"}, status_code=404)
-
     payload = await read_json_body(request)
     payload["token"] = bearer_token(request)
     try:

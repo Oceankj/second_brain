@@ -310,18 +310,16 @@ def test_load_settings_uses_legacy_embedding_env_as_fallback(
     assert settings.ollama_timeout_seconds == 8
 
 
-def test_load_settings_reads_api_feature_flags_from_env(
+def test_load_settings_reads_admin_api_feature_flag_from_env(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("DATABASE_URL", "postgresql://example")
-    monkeypatch.setenv("MEMORY_REST_API_ENABLED", "true")
     monkeypatch.setenv("MEMORY_ADMIN_API_ENABLED", "true")
 
     settings = load_settings()
 
-    assert settings.rest_api_enabled is True
     assert settings.admin_api_enabled is True
 
 
