@@ -56,7 +56,6 @@ from personal_agent_memory.config.defaults import (
     LEGACY_OLLAMA_TIMEOUT_SECONDS_ENV,
     MEMORY_CONFIG_PATH_ENV,
     PORT_ENV,
-    REST_API_ENABLED_ENV,
 )
 from personal_agent_memory.config.models import Settings
 from personal_agent_memory.config.parsing import (
@@ -82,7 +81,6 @@ def load_settings() -> Settings:
 
     return Settings(
         database_url=database_url,
-        rest_api_enabled=config_bool_from_env(REST_API_ENABLED_ENV, default=False),
         admin_api_enabled=config_bool_from_env(ADMIN_API_ENABLED_ENV, default=False),
         default_user_token=os.environ.get(DEFAULT_USER_TOKEN_ENV),
         **load_database_settings(memory_config),

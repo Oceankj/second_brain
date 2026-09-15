@@ -24,8 +24,7 @@ def create_http_server(settings: Settings | None = None) -> FastMCP:
     set_application_context(context)
     server = create_mcp_http_server(context=context)
     register_rest_routes(server, public_routes)
-    if context.settings.rest_api_enabled:
-        register_rest_routes(server, maintenance_routes)
+    register_rest_routes(server, maintenance_routes)
     if context.settings.admin_api_enabled:
         register_rest_routes(server, admin_routes)
     return server

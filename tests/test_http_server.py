@@ -5,12 +5,7 @@ from personal_agent_memory.server.entrypoints import http
 
 
 def test_create_http_server_includes_mcp_and_rest_routes() -> None:
-    server = http.create_http_server(
-        Settings(
-            database_url="postgresql://example",
-            rest_api_enabled=True,
-        )
-    )
+    server = http.create_http_server(Settings(database_url="postgresql://example"))
 
     app = server.streamable_http_app()
     paths = {route.path for route in app.routes}
@@ -26,7 +21,6 @@ def test_create_http_server_registers_only_enabled_api_groups() -> None:
     server = http.create_http_server(
         Settings(
             database_url="postgresql://example",
-            rest_api_enabled=False,
             admin_api_enabled=True,
         )
     )
@@ -37,17 +31,12 @@ def test_create_http_server_registers_only_enabled_api_groups() -> None:
     assert "/health" in paths
     assert "/users" in paths
     assert "/users/{user_id:str}" in paths
-    assert "/maintenance/daily-diary" not in paths
+    assert "/maintenance/daily-diary" in paths
 
 
-def test_main_starts_remote_mcp_when_rest_api_is_disabled(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_main_starts_unified_http_server(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[Settings, str]] = []
-    settings = Settings(
-        database_url="postgresql://example",
-        rest_api_enabled=False,
-    )
+    settings = Settings(database_url="postgresql://example")
 
     class FakeServer:
         def run(self, *, transport: str) -> None:

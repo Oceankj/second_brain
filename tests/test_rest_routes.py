@@ -39,18 +39,7 @@ class FakeUserService:
 
 
 @pytest.mark.anyio
-async def test_health_is_available_when_rest_api_is_disabled(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        rest,
-        "get_settings",
-        lambda: Settings(
-            database_url="postgresql://example",
-            rest_api_enabled=False,
-        ),
-    )
-
+async def test_health_is_public() -> None:
     response = await rest.health(make_request("/health"))
 
     assert response.status_code == 200
@@ -104,14 +93,6 @@ async def test_create_daily_diary_endpoint_uses_header_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fake_service = FakeMemoryService()
-    monkeypatch.setattr(
-        rest,
-        "get_settings",
-        lambda: Settings(
-            database_url="postgresql://example",
-            rest_api_enabled=True,
-        ),
-    )
     monkeypatch.setattr(rest, "get_memory_service", lambda: fake_service)
 
     request = make_json_request(

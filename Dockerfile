@@ -10,7 +10,6 @@ ENV PATH="/app/.venv/bin:$PATH" \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     MEMORY_CONFIG_PATH=/app/config/memory.json \
-    MEMORY_REST_API_ENABLED=true \
     MEMORY_ADMIN_API_ENABLED=false \
     PORT=8001
 
