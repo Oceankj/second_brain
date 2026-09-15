@@ -42,6 +42,7 @@ LOCAL_POSTGRES_USER=postgres
 LOCAL_POSTGRES_PASSWORD=postgres
 LOCAL_POSTGRES_PORT=5432
 MEMORY_REST_API_ENABLED=false
+MEMORY_ADMIN_API_ENABLED=false
 MEMORY_DEFAULT_USER_TOKEN=replace-with-a-random-token-at-least-32-chars
 CLOUDFLARE_ACCOUNT_ID=
 CLOUDFLARE_API_TOKEN=
@@ -159,7 +160,7 @@ uv run personal-agent-memory
 uv run personal-agent-memory-http
 ```
 
-執行 `personal-agent-memory-http` 就會啟動 remote MCP 與不需驗證的 `/health`。REST maintenance routes 預設關閉；設定 `MEMORY_REST_API_ENABLED=true` 才會開放這些 routes，但不影響 remote MCP 與 `/health`。stdio MCP tools 使用 top-level `token` argument；HTTP REST routes 使用 `Authorization: Bearer <token>` 或 `X-Memory-Token` header；remote MCP 使用 `Authorization: Bearer <token>` transport auth，不需要在 tool arguments 再傳 token。Token 只以 hash 形式寫入 DB。
+執行 `personal-agent-memory-http` 就會啟動 remote MCP 與不需驗證的 `/health`。REST maintenance routes 預設不註冊；設定 `MEMORY_REST_API_ENABLED=true` 才會加入這些 routes，但不影響 remote MCP 與 `/health`。`/users*` 管理 routes 由獨立的 `MEMORY_ADMIN_API_ENABLED` 控制，預設不註冊；即使開啟仍需要有效的 Bearer token。stdio MCP tools 使用 top-level `token` argument；HTTP REST routes 使用 `Authorization: Bearer <token>` 或 `X-Memory-Token` header；remote MCP 使用 `Authorization: Bearer <token>` transport auth，不需要在 tool arguments 再傳 token。Token 只以 hash 形式寫入 DB。
 
 建立每日 diary：
 

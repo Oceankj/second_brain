@@ -18,9 +18,11 @@ from personal_agent_memory.server.dependencies import (
 from personal_agent_memory.services.users import AuthenticationError
 
 
-async def require_api_enabled_and_authenticated(request: Request) -> JSONResponse | None:
-    if not get_settings().rest_api_enabled:
-        return JSONResponse({"error": "rest_api_disabled"}, status_code=404)
+async def require_admin_api_enabled_and_authenticated(
+    request: Request,
+) -> JSONResponse | None:
+    if not get_settings().admin_api_enabled:
+        return JSONResponse({"error": "admin_api_disabled"}, status_code=404)
 
     token = bearer_token(request)
     try:
@@ -39,13 +41,13 @@ def bearer_token(request: Request) -> str:
 
 
 async def list_users(request: Request) -> JSONResponse:
-    if error := await require_api_enabled_and_authenticated(request):
+    if error := await require_admin_api_enabled_and_authenticated(request):
         return error
     return JSONResponse({"users": await get_user_service().list_users()})
 
 
 async def get_user(request: Request) -> JSONResponse:
-    if error := await require_api_enabled_and_authenticated(request):
+    if error := await require_admin_api_enabled_and_authenticated(request):
         return error
     user = await get_user_service().get_user(request.path_params["user_id"])
     if user is None:
@@ -54,7 +56,7 @@ async def get_user(request: Request) -> JSONResponse:
 
 
 async def upsert_user(request: Request) -> JSONResponse:
-    if error := await require_api_enabled_and_authenticated(request):
+    if error := await require_admin_api_enabled_and_authenticated(request):
         return error
     payload = await read_json_body(request)
     user = await get_user_service().ensure_user(
@@ -65,7 +67,7 @@ async def upsert_user(request: Request) -> JSONResponse:
 
 
 async def update_user(request: Request) -> JSONResponse:
-    if error := await require_api_enabled_and_authenticated(request):
+    if error := await require_admin_api_enabled_and_authenticated(request):
         return error
     payload = await read_json_body(request)
     if "display_name" not in payload:
@@ -110,13 +112,21 @@ async def read_json_body(request: Request) -> dict[str, Any]:
     return body if isinstance(body, dict) else {}
 
 
-routes = [
+public_routes = [
     Route("/health", health, methods=["GET"]),
+]
+
+admin_routes = [
     Route("/users", list_users, methods=["GET"]),
     Route("/users/{user_id:str}", get_user, methods=["GET"]),
     Route("/users/{user_id:str}", upsert_user, methods=["PUT"]),
     Route("/users/{user_id:str}", update_user, methods=["PATCH"]),
+]
+
+maintenance_routes = [
     Route("/maintenance/daily-diary", create_daily_diary, methods=["POST"]),
 ]
+
+routes = [*public_routes, *admin_routes, *maintenance_routes]
 
 app = Starlette(debug=False, routes=routes)
