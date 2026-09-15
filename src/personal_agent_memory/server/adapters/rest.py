@@ -81,8 +81,6 @@ async def update_user(request: Request) -> JSONResponse:
 
 
 async def health(request: Request) -> JSONResponse:
-    if not get_settings().rest_api_enabled:
-        return JSONResponse({"status": "disabled"}, status_code=404)
     return JSONResponse({"status": "ok"})
 
 

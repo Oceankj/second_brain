@@ -159,7 +159,7 @@ uv run personal-agent-memory
 uv run personal-agent-memory-http
 ```
 
-REST routes 預設關閉；需要先設定 `MEMORY_REST_API_ENABLED=true`。Remote MCP HTTP 預設也關閉；需要在 `memory.json` 設定 `mcp_http.enabled=true`。`personal-agent-memory-http` 需要兩者都開啟。stdio MCP tools 使用 top-level `token` argument；HTTP REST routes 使用 `Authorization: Bearer <token>` 或 `X-Memory-Token` header；remote MCP 使用 `Authorization: Bearer <token>` transport auth，不需要在 tool arguments 再傳 token。Token 只以 hash 形式寫入 DB。
+執行 `personal-agent-memory-http` 就會啟動 remote MCP 與不需驗證的 `/health`。REST maintenance routes 預設關閉；設定 `MEMORY_REST_API_ENABLED=true` 才會開放這些 routes，但不影響 remote MCP 與 `/health`。stdio MCP tools 使用 top-level `token` argument；HTTP REST routes 使用 `Authorization: Bearer <token>` 或 `X-Memory-Token` header；remote MCP 使用 `Authorization: Bearer <token>` transport auth，不需要在 tool arguments 再傳 token。Token 只以 hash 形式寫入 DB。
 
 建立每日 diary：
 
@@ -177,7 +177,6 @@ Remote MCP HTTP 的 `memory.json` 設定範例：
 ```json
 {
   "mcp_http": {
-    "enabled": true,
     "host": "127.0.0.1",
     "port": 8001,
     "path": "/mcp",

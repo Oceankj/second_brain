@@ -9,7 +9,6 @@ def test_create_http_server_includes_mcp_and_rest_routes() -> None:
         Settings(
             database_url="postgresql://example",
             rest_api_enabled=True,
-            mcp_http_enabled=True,
         )
     )
 
@@ -23,31 +22,26 @@ def test_create_http_server_includes_mcp_and_rest_routes() -> None:
     assert "/maintenance/daily-diary" in paths
 
 
-def test_main_requires_mcp_http_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_main_starts_remote_mcp_when_rest_api_is_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[Settings, str]] = []
+    settings = Settings(
+        database_url="postgresql://example",
+        rest_api_enabled=False,
+    )
+
+    class FakeServer:
+        def run(self, *, transport: str) -> None:
+            calls.append((settings, transport))
+
     monkeypatch.setattr(
         http,
         "get_settings",
-        lambda: Settings(
-            database_url="postgresql://example",
-            rest_api_enabled=True,
-            mcp_http_enabled=False,
-        ),
+        lambda: settings,
     )
+    monkeypatch.setattr(http, "create_http_server", lambda _: FakeServer())
 
-    with pytest.raises(SystemExit, match="mcp_http.enabled=true"):
-        http.main()
+    http.main()
 
-
-def test_main_requires_rest_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        http,
-        "get_settings",
-        lambda: Settings(
-            database_url="postgresql://example",
-            rest_api_enabled=False,
-            mcp_http_enabled=True,
-        ),
-    )
-
-    with pytest.raises(SystemExit, match="MEMORY_REST_API_ENABLED=true"):
-        http.main()
+    assert calls == [(settings, "streamable-http")]

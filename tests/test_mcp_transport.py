@@ -73,7 +73,6 @@ def test_authenticated_bearer_token_requires_auth_context(
 def test_create_mcp_http_server_uses_http_settings() -> None:
     settings = Settings(
         database_url="postgresql://example",
-        mcp_http_enabled=True,
         mcp_http_host="0.0.0.0",
         mcp_http_port=9001,
         mcp_http_path="/memory-mcp",

@@ -98,7 +98,6 @@ docker run --rm \
 ```json
 {
   "mcp_http": {
-    "enabled": true,
     "host": "0.0.0.0",
     "port": 8001,
     "path": "/mcp",

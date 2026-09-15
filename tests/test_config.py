@@ -45,7 +45,6 @@ def test_load_memory_config_reads_repo_local_json(tmp_path: Path) -> None:
     "timezone": "America/Los_Angeles"
   },
   "mcp_http": {
-    "enabled": true,
     "host": "0.0.0.0",
     "port": 9001,
     "path": "/memory-mcp",
@@ -107,7 +106,6 @@ def test_load_memory_config_reads_repo_local_json(tmp_path: Path) -> None:
             "timezone": "America/Los_Angeles",
         },
         "mcp_http": {
-            "enabled": True,
             "host": "0.0.0.0",
             "port": 9001,
             "path": "/memory-mcp",
@@ -197,7 +195,6 @@ def test_load_settings_uses_memory_json_for_chunking(
     "timezone": "America/Los_Angeles"
   },
   "mcp_http": {
-    "enabled": true,
     "host": "0.0.0.0",
     "port": 9001,
     "path": "/memory-mcp",
@@ -246,7 +243,6 @@ def test_load_settings_uses_memory_json_for_chunking(
     assert settings.cloudflare_summary_max_tokens == 900
     assert settings.cloudflare_summary_temperature == 0.1
     assert settings.daily_diary_timezone == "America/Los_Angeles"
-    assert settings.mcp_http_enabled is True
     assert settings.mcp_http_host == "0.0.0.0"
     assert settings.mcp_http_port == 9001
     assert settings.mcp_http_path == "/memory-mcp"
@@ -336,7 +332,6 @@ def test_load_settings_uses_mcp_http_defaults(
 
     settings = load_settings()
 
-    assert settings.mcp_http_enabled is False
     assert settings.mcp_http_host == "127.0.0.1"
     assert settings.mcp_http_port == 8001
     assert settings.mcp_http_path == "/mcp"

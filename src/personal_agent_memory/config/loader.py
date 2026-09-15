@@ -30,7 +30,6 @@ from personal_agent_memory.config.defaults import (
     DEFAULT_MAX_CHUNK_CHARS,
     DEFAULT_MCP_HTTP_ALLOWED_HOSTS,
     DEFAULT_MCP_HTTP_ALLOWED_ORIGINS,
-    DEFAULT_MCP_HTTP_ENABLED,
     DEFAULT_MCP_HTTP_HOST,
     DEFAULT_MCP_HTTP_MAX_REQUEST_BODY_SIZE,
     DEFAULT_MCP_HTTP_PATH,
@@ -60,7 +59,6 @@ from personal_agent_memory.config.defaults import (
 )
 from personal_agent_memory.config.models import Settings
 from personal_agent_memory.config.parsing import (
-    config_bool_from_section,
     config_float,
     config_float_from_section,
     config_int,
@@ -354,11 +352,6 @@ def load_mcp_http_settings(memory_config: Mapping[str, Any]) -> dict[str, Any]:
         default=DEFAULT_MCP_HTTP_PORT,
     )
     return {
-        "mcp_http_enabled": config_bool_from_section(
-            mcp_http_config,
-            key="enabled",
-            default=DEFAULT_MCP_HTTP_ENABLED,
-        ),
         "mcp_http_host": config_str(
             mcp_http_config,
             key="host",

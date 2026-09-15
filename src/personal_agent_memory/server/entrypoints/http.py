@@ -31,11 +31,6 @@ def register_rest_routes(server: FastMCP, routes: Iterable[Route]) -> None:
 
 def main() -> None:
     settings = get_settings()
-    if not settings.mcp_http_enabled:
-        raise SystemExit("Unified HTTP server requires mcp_http.enabled=true in memory.json.")
-    if not settings.rest_api_enabled:
-        raise SystemExit("Unified HTTP server requires MEMORY_REST_API_ENABLED=true.")
-
     create_http_server(settings).run(transport="streamable-http")
 
 

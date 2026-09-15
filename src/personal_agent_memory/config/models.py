@@ -25,7 +25,6 @@ from personal_agent_memory.config.defaults import (
     DEFAULT_MAX_CHUNK_CHARS,
     DEFAULT_MCP_HTTP_ALLOWED_HOSTS,
     DEFAULT_MCP_HTTP_ALLOWED_ORIGINS,
-    DEFAULT_MCP_HTTP_ENABLED,
     DEFAULT_MCP_HTTP_HOST,
     DEFAULT_MCP_HTTP_MAX_REQUEST_BODY_SIZE,
     DEFAULT_MCP_HTTP_PATH,
@@ -89,7 +88,6 @@ class Settings:
     link_expansion_max_items: int = DEFAULT_LINK_EXPANSION_MAX_ITEMS
     link_expansion_source_limit: int = DEFAULT_LINK_EXPANSION_SOURCE_LIMIT
     link_expansion_source_weight: float = DEFAULT_LINK_EXPANSION_SOURCE_WEIGHT
-    mcp_http_enabled: bool = DEFAULT_MCP_HTTP_ENABLED
     mcp_http_host: str = DEFAULT_MCP_HTTP_HOST
     mcp_http_port: int = DEFAULT_MCP_HTTP_PORT
     mcp_http_path: str = DEFAULT_MCP_HTTP_PATH
