@@ -26,6 +26,18 @@ class FakeMemoryService:
         }
 
 
+class FakeUserService:
+    def __init__(self) -> None:
+        self.tokens: list[str] = []
+
+    async def authenticate_token(self, token: str) -> dict[str, str]:
+        self.tokens.append(token)
+        return {"id": "user-1"}
+
+    async def list_users(self) -> list[dict[str, str]]:
+        return [{"id": "user-1", "display_name": "Test User"}]
+
+
 @pytest.mark.anyio
 async def test_health_is_available_when_rest_api_is_disabled(
     monkeypatch: pytest.MonkeyPatch,
@@ -43,6 +55,48 @@ async def test_health_is_available_when_rest_api_is_disabled(
 
     assert response.status_code == 200
     assert json.loads(response.body) == {"status": "ok"}
+
+
+@pytest.mark.anyio
+async def test_admin_api_is_disabled_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        rest,
+        "get_settings",
+        lambda: Settings(database_url="postgresql://example"),
+    )
+
+    response = await rest.list_users(make_request("/users"))
+
+    assert response.status_code == 404
+    assert json.loads(response.body) == {"error": "admin_api_disabled"}
+
+
+@pytest.mark.anyio
+async def test_admin_api_authenticates_when_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_service = FakeUserService()
+    monkeypatch.setattr(
+        rest,
+        "get_settings",
+        lambda: Settings(
+            database_url="postgresql://example",
+            admin_api_enabled=True,
+        ),
+    )
+    monkeypatch.setattr(rest, "get_user_service", lambda: fake_service)
+
+    response = await rest.list_users(
+        make_request("/users", headers={"authorization": "Bearer admin-token"})
+    )
+
+    assert response.status_code == 200
+    assert fake_service.tokens == ["admin-token"]
+    assert json.loads(response.body) == {
+        "users": [{"id": "user-1", "display_name": "Test User"}]
+    }
 
 
 @pytest.mark.anyio
@@ -75,13 +129,17 @@ async def test_create_daily_diary_endpoint_uses_header_token(
     assert fake_service.payloads[0].dry_run is True
 
 
-def make_request(path: str) -> Request:
+def make_request(path: str, *, headers: dict[str, str] | None = None) -> Request:
+    raw_headers = [
+        (key.lower().encode("latin-1"), value.encode("latin-1"))
+        for key, value in (headers or {}).items()
+    ]
     return Request(
         {
             "type": "http",
             "method": "GET",
             "path": path,
-            "headers": [],
+            "headers": raw_headers,
         }
     )
 

@@ -17,9 +17,27 @@ def test_create_http_server_includes_mcp_and_rest_routes() -> None:
 
     assert "/mcp" in paths
     assert "/health" in paths
+    assert "/maintenance/daily-diary" in paths
+    assert "/users" not in paths
+    assert "/users/{user_id:str}" not in paths
+
+
+def test_create_http_server_registers_only_enabled_api_groups() -> None:
+    server = http.create_http_server(
+        Settings(
+            database_url="postgresql://example",
+            rest_api_enabled=False,
+            admin_api_enabled=True,
+        )
+    )
+
+    paths = {route.path for route in server.streamable_http_app().routes}
+
+    assert "/mcp" in paths
+    assert "/health" in paths
     assert "/users" in paths
     assert "/users/{user_id:str}" in paths
-    assert "/maintenance/daily-diary" in paths
+    assert "/maintenance/daily-diary" not in paths
 
 
 def test_main_starts_remote_mcp_when_rest_api_is_disabled(

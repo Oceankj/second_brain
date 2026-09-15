@@ -54,6 +54,7 @@ class Settings:
     database_pool_max_size: int = DEFAULT_DATABASE_POOL_MAX_SIZE
     database_pool_timeout_seconds: float = DEFAULT_DATABASE_POOL_TIMEOUT_SECONDS
     rest_api_enabled: bool = False
+    admin_api_enabled: bool = False
     default_user_token: str | None = None
     embedding_provider: str = DEFAULT_EMBEDDING_PROVIDER
     embedding_dimension: int = DEFAULT_EMBEDDING_DIMENSION
