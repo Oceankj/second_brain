@@ -105,7 +105,9 @@ CLOUDFLARE_API_TOKEN=
 }
 ```
 
-預設會讀取 repo root 的 `memory.json`。部署時如果要使用不同 config 檔，可以設定：
+本機執行預設讀取 repo root 的 `memory.json`。標準 Docker image 已在
+`Dockerfile` 指定 `/app/config/memory.json`，因此本機 `.env` 與 Render
+environment variables 都不需要重複設定。只有使用自訂 config 路徑時才需要：
 
 ```dotenv
 MEMORY_CONFIG_PATH=/app/config/memory.json
