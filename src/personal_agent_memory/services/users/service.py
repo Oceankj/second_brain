@@ -45,9 +45,14 @@ class UserService:
         token_hash = hash_token(token)
         user = await self.repository.users.find_by_token_hash(token_hash)
         if user:
+            if not user.get("is_active", True):
+                raise AuthenticationError("invalid_token")
             return serialize_user(user)
 
         if self.default_user_token and hmac.compare_digest(token, self.default_user_token):
+            existing_user = await self.repository.users.get(DEFAULT_USER_ID)
+            if existing_user and not existing_user.get("is_active", True):
+                raise AuthenticationError("invalid_token")
             user = await self.ensure_user(
                 DEFAULT_USER_ID,
                 display_name=DEFAULT_USER_DISPLAY_NAME,

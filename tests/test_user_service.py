@@ -139,3 +139,41 @@ async def test_authenticate_token_rejects_unknown_token() -> None:
 
     with pytest.raises(AuthenticationError, match="invalid_token"):
         await service.authenticate_token("z" * 32)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("seeded", [True, False])
+async def test_disabled_user_cannot_use_default_token(seeded: bool) -> None:
+    repository = FakeRepository()
+    repository.users.rows[DEFAULT_USER_ID]["is_active"] = False
+    token = "x" * 32
+    if seeded:
+        repository.users.token_hashes[hash_token(token)] = DEFAULT_USER_ID
+    service = UserService(repository=repository, default_user_token=token)
+
+    with pytest.raises(AuthenticationError, match="^invalid_token$"):
+        await service.authenticate_token(token)
+    assert not repository.users.upsert_calls
+
+
+@pytest.mark.anyio
+async def test_user_responses_exclude_credentials() -> None:
+    repository = FakeRepository()
+    repository.users.rows[DEFAULT_USER_ID].update(
+        password_hash="private-password-hash", api_token_hash="private-token-hash"
+    )
+    repository.users.token_hashes[hash_token("token")] = DEFAULT_USER_ID
+    service = UserService(repository=repository)
+
+    responses = [
+        await service.get_user(),
+        *(await service.list_users()),
+        await service.ensure_user(),
+        await service.update_user(DEFAULT_USER_ID, display_name="Updated"),
+        await service.authenticate_token("token"),
+    ]
+    for response in responses:
+        assert response is not None
+        assert "password_hash" not in response
+        assert "api_token_hash" not in response
+        assert "private-" not in str(response)

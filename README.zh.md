@@ -7,6 +7,8 @@
 
 ## Quick Start
 
+帳號建立、改密碼與停用／啟用請見 [帳號管理 CLI](docs/account-management.md)。
+
 這條流程只涵蓋本機啟動：安裝依賴、啟動 PostgreSQL + pgvector，預設 embedding provider 為 Ollama，套 schema、啟動 stdio MCP server。
 
 安裝依賴：

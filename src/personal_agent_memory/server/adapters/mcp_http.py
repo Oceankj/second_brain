@@ -39,8 +39,8 @@ def create_mcp_http_server(
         max_request_body_size=settings.mcp_http_max_request_body_size,
         lifespan=context.lifespan,
         auth=AuthSettings(
-            issuer_url=settings.mcp_http_public_url,
-            resource_server_url=settings.mcp_http_public_url,
+            issuer_url=settings.oauth_issuer_url,
+            resource_server_url=settings.oauth_resource_url,
             required_scopes=MCP_HTTP_SCOPES,
         ),
         token_verifier=MemoryTokenVerifier(context.user_service),

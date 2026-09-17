@@ -18,6 +18,8 @@ P0 目前聚焦在七張 tables：
 
 ## users
 
+OAuth 授權資料表另見 [OAuth storage](../oauth-storage.md)。
+
 儲存最小 user scope。P0 先支援單機/本機使用情境，預設建立 `id = '0'` 的 default user；未來如果有多使用者或多 profile，再沿用同一個欄位做隔離。
 
 ```sql
@@ -25,6 +27,9 @@ create table users (
   id text primary key,
   display_name text,
   api_token_hash text,
+  username text unique,
+  password_hash text,
+  is_active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -35,6 +40,15 @@ on conflict (id) do nothing;
 ```
 
 `api_token_hash` 儲存 token 的 SHA-256 hash，不儲存 raw token。P0 會從 `.env` 的 `MEMORY_DEFAULT_USER_TOKEN` 驗證 default user，第一次成功驗證時把 hash 寫到 `users.api_token_hash`。
+
+`002_user_login.sql` 加入封閉式帳號登入的基礎欄位：
+
+- `username` 忽略大小寫，DB trigger 會將所有寫入轉成小寫，unique index 防止重複；空白名稱會被拒絕。尚未設定登入的既有使用者可保留 NULL。
+- 既有 `id = '0'` 在 username 為 NULL 時設定為 `admin`，保留原有 memory 歸屬；這個名稱本身不賦予額外權限。
+- `password_hash` 只保存 Argon2id encoded hash（包含隨機 salt），預設 NULL，不會產生預設密碼。密碼不做大小寫轉換。
+- `is_active` 預設 true；停用帳號後，既有 API token 與 default-token fallback 都會拒絕驗證。
+
+密碼 helper 位於 `services/users/passwords.py`；一般使用者查詢與回應不包含密碼雜湊。帳號可透過 [memory-admin CLI](../account-management.md) 管理；沒有公開註冊或密碼登入 endpoint，OAuth 將於後續階段實作。執行現有 migration script 即可套用此可重複執行的 migration。
 
 ## memory_items
 

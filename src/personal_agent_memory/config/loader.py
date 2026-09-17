@@ -81,6 +81,7 @@ def load_settings() -> Settings:
 
     return Settings(
         database_url=database_url,
+        public_base_url=os.environ.get('PUBLIC_BASE_URL') or None,
         admin_api_enabled=config_bool_from_env(ADMIN_API_ENABLED_ENV, default=False),
         default_user_token=os.environ.get(DEFAULT_USER_TOKEN_ENV),
         **load_database_settings(memory_config),

@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from pydantic import AnyHttpUrl
+
 from personal_agent_memory.config.defaults import (
     DEFAULT_CHUNK_OVERLAP_CHARS,
     DEFAULT_CLOUDFLARE_BASE_URL,
@@ -92,6 +94,7 @@ class Settings:
     mcp_http_port: int = DEFAULT_MCP_HTTP_PORT
     mcp_http_path: str = DEFAULT_MCP_HTTP_PATH
     mcp_http_public_url: str = DEFAULT_MCP_HTTP_PUBLIC_URL
+    public_base_url: str | None = None
     mcp_http_allowed_hosts: tuple[str, ...] = DEFAULT_MCP_HTTP_ALLOWED_HOSTS
     mcp_http_allowed_origins: tuple[str, ...] = DEFAULT_MCP_HTTP_ALLOWED_ORIGINS
     mcp_http_max_request_body_size: int = DEFAULT_MCP_HTTP_MAX_REQUEST_BODY_SIZE
@@ -186,6 +189,13 @@ class Settings:
             raise ValueError("link_expansion_source_weight must be between 0 and 1")
 
     def _validate_mcp_http(self) -> None:
+        base = urlparse(self.public_base_url or self.oauth_base_url)
+        if (base.scheme != 'https' and not (
+            base.scheme == 'http' and base.hostname in {'localhost', '127.0.0.1', '::1'}
+        )) or not base.hostname or base.username or base.password:
+            raise ValueError('OAuth public URL must use HTTPS (HTTP is allowed only on loopback)')
+        if base.path not in {'', '/'} or base.query or base.fragment:
+            raise ValueError('PUBLIC_BASE_URL must be an origin without a path, query or fragment')
         if not self.mcp_http_host:
             raise ValueError("mcp_http_host is required")
         if not 1 <= self.mcp_http_port <= 65535:
@@ -195,5 +205,25 @@ class Settings:
         parsed_public_url = urlparse(self.mcp_http_public_url)
         if parsed_public_url.scheme not in {"http", "https"} or not parsed_public_url.netloc:
             raise ValueError("mcp_http_public_url must be an http(s) URL")
+        if (parsed_public_url.username or parsed_public_url.password
+                or parsed_public_url.query or parsed_public_url.fragment):
+            raise ValueError('mcp_http_public_url cannot contain credentials, query or fragment')
         if self.mcp_http_max_request_body_size <= 0:
             raise ValueError("mcp_http_max_request_body_size must be positive")
+
+    @property
+    def oauth_base_url(self) -> str:
+        if self.public_base_url:
+            return str(AnyHttpUrl(self.public_base_url)).rstrip('/')
+        parsed = urlparse(self.mcp_http_public_url)
+        return str(AnyHttpUrl(f'{parsed.scheme}://{parsed.netloc}')).rstrip('/')
+
+    @property
+    def oauth_issuer_url(self) -> str:
+        return self.oauth_base_url + '/'
+
+    @property
+    def oauth_resource_url(self) -> str:
+        if self.public_base_url:
+            return self.oauth_base_url + self.mcp_http_path
+        return self.mcp_http_public_url
