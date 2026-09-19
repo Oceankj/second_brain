@@ -1,4 +1,4 @@
-"""Phase 4 discovery and public-client registration; login/token exchange follows later."""
+"""OAuth discovery, public-client registration and browser authorization routes."""
 
 import json
 import secrets
@@ -12,6 +12,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
+from personal_agent_memory.server.adapters.oauth_login import login_routes
+from personal_agent_memory.server.adapters.oauth_token import token_routes
 from personal_agent_memory.server.application import ApplicationContext
 from personal_agent_memory.server.auth.transport import MCP_HTTP_SCOPES
 
@@ -80,6 +82,7 @@ def oauth_routes(context: ApplicationContext) -> list[Route]:
             'grant_types_supported': ['authorization_code', 'refresh_token'],
             'token_endpoint_auth_methods_supported': ['none'],
             'code_challenge_methods_supported': ['S256'],
+            'authorization_response_iss_parameter_supported': True,
             'scopes_supported': MCP_HTTP_SCOPES,
         })
 
@@ -122,6 +125,8 @@ def oauth_routes(context: ApplicationContext) -> list[Route]:
         return JSONResponse(client, status_code=201, headers={'Cache-Control': 'no-store'})
 
     routes = [
+        *login_routes(context),
+        *token_routes(context),
         Route('/.well-known/oauth-authorization-server', metadata, methods=['GET']),
         Route('/oauth/register', register, methods=['POST']),
     ]

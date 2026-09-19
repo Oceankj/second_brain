@@ -30,4 +30,4 @@ uv run memory-admin list-users
 - 停用保留所有資料，既有 token 驗證會失敗。啟用會恢復帳號；修改密碼不會自動啟用帳號，也不會撤銷現有 API token。
 - 成功 exit code 為 0，驗證／資料庫錯誤為 1，參數錯誤為 2，取消輸入為 130。
 
-此階段完成帳號管理，OAuth 登入頁與 token endpoint 仍屬後續階段。
+帳號可用於 [OAuth 登入與授權頁](oauth-login.md)，並透過 [Token endpoint](oauth-token.md) 完成連線。

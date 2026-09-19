@@ -2,9 +2,15 @@
 
 這份文件說明「你登入自己的服務後，ChatGPT 如何取得存取記憶的權限」，以及每個步驟需要哪些資料表。
 
-**資料表、索引與資料庫約束已完成；Phase 4 的 discovery 與 client 註冊也已提供。下方的登入、授權、兌換及撤銷流程仍是後續實作設計。**
+**資料表、discovery、client 註冊、登入授權、token 兌換、refresh rotation 與 MCP token 驗證均已完成。**
+
+MCP 驗證與工具權限請見 [OAuth MCP 存取驗證](oauth-mcp-auth.md)。
 
 連線設定與註冊端點請見 [OAuth discovery 與 client 註冊](oauth-discovery.md)。
+
+登入、CSRF 與一次性 code 請見 [OAuth 登入與授權](oauth-login.md)。
+
+Code 兌換與 refresh rotation 請見 [OAuth Token 兌換與更新](oauth-token.md)。
 
 資料表定義：[003_oauth_storage.sql](../migrations/003_oauth_storage.sql)。帳號操作：[帳號管理 CLI](account-management.md)。
 
@@ -110,7 +116,7 @@ flowchart TD
 
 資料庫已限制「每個 family 最多一個初始 refresh token」及「每個 refresh token 最多一個後繼 token」，並確保前後兩個 token 屬於同一個 family。
 
-**輪替與重複使用偵測尚未實作。** 後續服務需要在交易中鎖定記錄，檢查狀態並更新 `consumed_at`。整組撤銷後，MCP 驗證 access token 時也必須檢查 family 的 `revoked_at`。
+輪替與重複使用偵測已完成。服務會在交易中鎖定記錄、更新 `consumed_at`，並建立下一個 refresh token。偵測到重放時會撤銷整個 family；MCP 驗證 access token 時也會檢查 family 的 `revoked_at`。
 
 ## 5. 哪些資料保存 hash？
 
@@ -133,7 +139,7 @@ SHA-256 hash 欄位限制為 64 個小寫十六進位字元。這只能驗證格
 | Token family 關聯與 refresh 輪替的唯一性 | 在交易中鎖定、兌換、標記已使用及偵測重複使用 |
 | `expires_at` 必須晚於 `created_at` | 每次操作時確認尚未過期、尚未撤銷 |
 | 保存 user、client、resource 與 scopes | 檢查帳號啟用狀態、client 撤銷狀態、resource 與操作權限 |
-| 保存 session 與 CSRF token hash | 驗證表單 CSRF；登入成功時輪替 session secret |
+| 保存 session 與 CSRF token hash | Phase 5 已驗證表單 CSRF，並在登入成功時輪替 session secret |
 
 七張表均啟用 Row Level Security（RLS），沒有公開存取 policy，並撤銷 `PUBLIC`、Supabase `anon` 與 `authenticated` 的資料表權限。後端透過具有適當權限的 `DATABASE_URL` 存取。
 

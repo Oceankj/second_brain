@@ -2,6 +2,17 @@
 
 P0 先實作兩個 tools：`get_context` 與 `ingest_turn`。
 
+## 驗證方式
+
+以下帶有 `token` 的範例與 input schema 適用於 **stdio**。HTTP MCP 不接受工具參數中的 token 或 user_id，而是使用 `Authorization: Bearer <OAuth access token>`。
+
+| 傳輸方式 | 憑證來源 | 使用者身分 |
+| --- | --- | --- |
+| stdio | 工具參數中的舊版 API token | 由 API token 解析 |
+| HTTP MCP | HTTP header 中的 OAuth access token | 由驗證後的 subject 取得 |
+
+HTTP 的 `get_context` 需要 `memory:read`，`ingest_turn` 需要 `memory:write`；詳見 [OAuth MCP 存取驗證](oauth-mcp-auth.md)。OAuth 登入、token 兌換與更新流程均已完成。
+
 Runtime input contracts live in `src/personal_agent_memory/contracts/`. The JSON Schema files linked below are documentation snapshots for external readers and should be regenerated from the runtime contracts if they become machine-read by clients.
 
 ## get_context
@@ -33,7 +44,7 @@ Output schema:
 ### Behavior
 
 - 預設搜尋 `note`、`diary`、`profile_memory`。
-- Caller 必須提供 top-level `token`；server 會用 token 驗證並解析 user identity。
+- stdio caller 必須提供 top-level `token`；HTTP caller 使用 Bearer access token。Server 會從驗證結果解析使用者身分。
 - Retrieval 會先用原始 input embedding 搜尋最近 N 天的 `diary` chunks，將分數達到 `memory.json` 門檻的 diary 視為 relevant。
 - 若 caller 未提供 `diary_lookback_days`，server 使用 `memory.json` 的 `retrieval.recent_diary_lookback_days` 作為預設；caller 仍可逐次 override。
 - 若 recent diary 相關，先把 diary context 併入 retrieval context，再進 semantic retrieval。
@@ -95,7 +106,7 @@ Output schema:
 ### Behavior
 
 - Memory source 是完整 interaction，不只是 assistant output。
-- Caller 必須提供 top-level `token`；server 會用 token 驗證並決定寫入的 `user_id`。
+- stdio caller 必須提供 top-level `token`；HTTP caller 使用 Bearer access token。Server 會從驗證結果決定寫入的 `user_id`。
 - P0 要求 caller 提供 `metadata.ingest_reason`，避免每輪 raw output 都無腦寫入 durable memory。
 - 若不想寫入 durable memory，caller 不應呼叫 `ingest_turn`。
 - 缺少 `metadata.ingest_reason` 是 invalid input，不會建立 memory item。

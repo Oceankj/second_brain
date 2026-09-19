@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from personal_agent_memory.contracts import GetContextInput
+from personal_agent_memory.contracts.memory import GetContextData
 from personal_agent_memory.utils.serialization import (
     build_compact_context,
     serialize_context_item,
@@ -143,7 +143,7 @@ def serialize_items(
 
 def build_context_response(
     *,
-    payload: GetContextInput,
+    payload: GetContextData,
     serialized_items: list[dict[str, Any]],
     recent_diaries: list[dict[str, Any]],
 ) -> dict[str, Any]:

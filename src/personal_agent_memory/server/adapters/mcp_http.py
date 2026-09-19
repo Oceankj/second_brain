@@ -2,25 +2,41 @@ from __future__ import annotations
 
 from typing import Any
 
+from mcp.server.auth.routes import create_protected_resource_routes
 from mcp.server.auth.settings import AuthSettings
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
+from starlette.applications import Starlette
 
 from personal_agent_memory.config import Settings
+from personal_agent_memory.contracts.memory import GetContextData, IngestTurnData
 from personal_agent_memory.server.auth.transport import (
     MCP_HTTP_SCOPES,
-    MemoryTokenVerifier,
-    authenticated_bearer_token,
+    OAuthTokenVerifier,
+    authenticated_user_id,
 )
 from personal_agent_memory.server.dependencies import (
     ApplicationContext,
     create_application_context,
     set_application_context,
 )
-from personal_agent_memory.server.tools.memory import (
-    get_context_with_token,
-    ingest_turn_with_token,
-)
+
+
+class ScopedFastMCP(FastMCP):
+    def streamable_http_app(self) -> Starlette:
+        app = super().streamable_http_app()
+        auth = self.settings.auth
+        assert auth is not None and auth.resource_server_url is not None
+        routes = create_protected_resource_routes(
+            auth.resource_server_url,
+            [auth.issuer_url],
+            scopes_supported=MCP_HTTP_SCOPES,
+        )
+        # Advertise supported scopes without requiring BOTH scopes at the transport layer.
+        paths = {route.path for route in routes}
+        app.router.routes[:] = [r for r in app.routes if getattr(r, "path", None) not in paths]
+        app.router.routes.extend(routes)
+        return app
 
 
 def create_mcp_http_server(
@@ -31,7 +47,7 @@ def create_mcp_http_server(
     context = context or create_application_context(settings)
     settings = context.settings
     set_application_context(context)
-    server = FastMCP(
+    server = ScopedFastMCP(
         "personal-agent-memory",
         host=settings.mcp_http_host,
         port=settings.mcp_http_port,
@@ -41,38 +57,45 @@ def create_mcp_http_server(
         auth=AuthSettings(
             issuer_url=settings.oauth_issuer_url,
             resource_server_url=settings.oauth_resource_url,
-            required_scopes=MCP_HTTP_SCOPES,
+            required_scopes=[],
         ),
-        token_verifier=MemoryTokenVerifier(context.user_service),
+        token_verifier=OAuthTokenVerifier(
+            lambda: context.repository().oauth_tokens,
+            resource=settings.oauth_resource_url,
+            issuer=settings.oauth_issuer_url,
+        ),
         transport_security=TransportSecuritySettings(
             enable_dns_rebinding_protection=True,
             allowed_hosts=list(settings.mcp_http_allowed_hosts),
             allowed_origins=list(settings.mcp_http_allowed_origins),
         ),
     )
-    register_authenticated_tools(server)
+    register_authenticated_tools(server, context)
     return server
 
 
-def register_authenticated_tools(server: FastMCP) -> None:
+def register_authenticated_tools(server: FastMCP, context: ApplicationContext) -> None:
     @server.tool(name="ingest_turn")
     async def ingest_turn(
         user_input: str,
         assistant_output: str,
         metadata: dict[str, Any],
+        ctx: Context,
     ) -> dict[str, Any]:
         """Store one interaction as candidate durable memory."""
 
-        return await ingest_turn_with_token(
-            token=authenticated_bearer_token(),
+        user_id = authenticated_user_id(ctx, "memory:write")
+        payload = IngestTurnData(
             user_input=user_input,
             assistant_output=assistant_output,
             metadata=metadata,
         )
+        return await context.memory_service().ingest_turn_as_user(payload, user_id=user_id)
 
     @server.tool(name="get_context")
     async def get_context(
         input: str,
+        ctx: Context,
         session_id: str | None = None,
         diary_lookback_days: int | None = None,
         max_context_chars: int = 6000,
@@ -80,11 +103,16 @@ def register_authenticated_tools(server: FastMCP) -> None:
     ) -> dict[str, Any]:
         """Retrieve compact durable memory context for the caller input."""
 
-        return await get_context_with_token(
+        user_id = authenticated_user_id(ctx, "memory:read")
+        payload = GetContextData(
             input=input,
-            token=authenticated_bearer_token(),
             session_id=session_id,
-            diary_lookback_days=diary_lookback_days,
+            diary_lookback_days=(
+                context.settings.recent_diary_lookback_days
+                if diary_lookback_days is None
+                else diary_lookback_days
+            ),
             max_context_chars=max_context_chars,
             include_chunks=include_chunks,
         )
+        return await context.memory_service().get_context_as_user(payload, user_id=user_id)

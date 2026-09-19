@@ -7,18 +7,14 @@ from pydantic import BaseModel, ConfigDict, Field
 from personal_agent_memory.contracts.types import IngestReason, MemoryItemType
 
 
-class GetContextInput(BaseModel):
+class GetContextData(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     input: str = Field(min_length=1)
-    token: str = Field(
-        min_length=1,
-        description="API token used to authenticate the caller and resolve user identity.",
-    )
     user_id: str = Field(
         default="0",
         min_length=1,
-        description="Resolved user identity. Server-side auth overwrites this from token.",
+        description="Resolved user identity. Overwritten by server-side authentication.",
     )
     session_id: str | None = None
     memory_types: list[MemoryItemType] = Field(
@@ -29,6 +25,13 @@ class GetContextInput(BaseModel):
     max_context_chars: int = Field(default=6000, ge=500, le=50000)
     link_expansion_depth: int = Field(default=1, ge=0, le=2)
     include_chunks: bool = False
+
+
+class GetContextInput(GetContextData):
+    token: str = Field(
+        min_length=1,
+        description="API token used to authenticate the caller and resolve user identity.",
+    )
 
 
 class IngestTurnMetadata(BaseModel):
@@ -42,16 +45,19 @@ class IngestTurnMetadata(BaseModel):
     ingest_reason: IngestReason
 
 
-class IngestTurnInput(BaseModel):
+class IngestTurnData(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    user_input: str = Field(min_length=1)
+    assistant_output: str = Field(min_length=1)
+    metadata: IngestTurnMetadata
+
+
+class IngestTurnInput(IngestTurnData):
     token: str = Field(
         min_length=1,
         description="API token used to authenticate the caller and resolve user identity.",
     )
-    user_input: str = Field(min_length=1)
-    assistant_output: str = Field(min_length=1)
-    metadata: IngestTurnMetadata
 
 
 class CreateDailyDiaryInput(BaseModel):

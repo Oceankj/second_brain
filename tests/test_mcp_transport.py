@@ -90,7 +90,7 @@ def test_create_mcp_http_server_uses_http_settings() -> None:
     assert server.settings.max_request_body_size == 12345
     assert server.settings.auth is not None
     assert str(server.settings.auth.issuer_url).rstrip("/") == "https://memory.example.test"
-    assert server.settings.auth.required_scopes == ["memory:read", "memory:write"]
+    assert server.settings.auth.required_scopes == []
     assert server.settings.transport_security is not None
     assert server.settings.transport_security.allowed_hosts == ["memory.example.test"]
     assert server.settings.transport_security.allowed_origins == ["https://agent.example.test"]

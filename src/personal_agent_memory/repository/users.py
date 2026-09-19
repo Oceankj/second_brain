@@ -9,6 +9,16 @@ class UsersRepository:
     def __init__(self, connect: Connect) -> None:
         self._connect = connect
 
+    async def find_login(self, username: str) -> dict[str, Any] | None:
+        """Internal authentication only; never serialize this row in a response or log."""
+        async with self._connect() as conn:
+            cursor = await conn.execute(
+                "select id, password_hash, is_active from users where username = lower(%s)",
+                (username,),
+            )
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
     async def create_login(
         self, user_id: str, username: str, password_hash: str, display_name: str | None
     ) -> dict[str, Any]:

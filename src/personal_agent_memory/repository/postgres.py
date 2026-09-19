@@ -12,7 +12,9 @@ from personal_agent_memory.repository.memory_item_events import MemoryItemEvents
 from personal_agent_memory.repository.memory_item_tags import MemoryItemTagsRepository
 from personal_agent_memory.repository.memory_items import MemoryItemsRepository
 from personal_agent_memory.repository.memory_links import MemoryLinksRepository
+from personal_agent_memory.repository.oauth_authorizations import OAuthAuthorizationsRepository
 from personal_agent_memory.repository.oauth_clients import OAuthClientsRepository
+from personal_agent_memory.repository.oauth_tokens import OAuthTokensRepository
 from personal_agent_memory.repository.tags import TagsRepository
 from personal_agent_memory.repository.users import UsersRepository
 
@@ -30,6 +32,8 @@ class PostgresMemoryRepository:
         self.tags = TagsRepository(self._connect)
         self.users = UsersRepository(self._connect)
         self.oauth_clients = OAuthClientsRepository(self._connect)
+        self.oauth_tokens = OAuthTokensRepository(self._connect)
+        self.oauth_authorizations = OAuthAuthorizationsRepository(self._connect)
         self.memory_item_tags = MemoryItemTagsRepository(self._connect)
         self.memory_item_events = MemoryItemEventsRepository(self._connect)
 

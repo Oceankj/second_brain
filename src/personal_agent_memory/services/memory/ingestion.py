@@ -3,7 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from personal_agent_memory.contracts import IngestReason, IngestTurnInput, MemoryItemType
+from personal_agent_memory.contracts import IngestReason, MemoryItemType
+from personal_agent_memory.contracts.memory import IngestTurnData
 from personal_agent_memory.providers.embeddings import EmbeddingProvider
 from personal_agent_memory.repository import PostgresMemoryRepository
 from personal_agent_memory.services.memory.chunking import chunk_text
@@ -64,7 +65,7 @@ class IngestionService:
         self.max_chunk_chars = max_chunk_chars
         self.chunk_overlap_chars = chunk_overlap_chars
 
-    async def ingest_turn(self, payload: IngestTurnInput, *, user_id: str) -> dict[str, Any]:
+    async def ingest_turn(self, payload: IngestTurnData, *, user_id: str) -> dict[str, Any]:
         evaluate_ingest_policy(payload.metadata)
 
         candidate_items = []
@@ -138,7 +139,7 @@ class IngestionService:
         source_item_id: str,
         user_id: str,
         body: str,
-        payload: IngestTurnInput,
+        payload: IngestTurnData,
     ) -> LinkCreationResult:
         links = []
         events = []
@@ -167,7 +168,7 @@ class IngestionService:
         return LinkCreationResult(links=links, events=events)
 
 
-def extract_memory_candidates(payload: IngestTurnInput) -> list[ExtractedMemoryCandidate]:
+def extract_memory_candidates(payload: IngestTurnData) -> list[ExtractedMemoryCandidate]:
     reason = payload.metadata.ingest_reason
 
     return [
@@ -187,7 +188,7 @@ def memory_type_for_reason(reason: IngestReason) -> MemoryItemType:
 
 
 def created_event_metadata(
-    payload: IngestTurnInput,
+    payload: IngestTurnData,
     candidate: ExtractedMemoryCandidate,
 ) -> dict[str, Any]:
     metadata = payload.metadata.model_dump(mode="json")
@@ -201,7 +202,7 @@ def created_event_metadata(
 
 def linked_event_metadata(
     *,
-    payload: IngestTurnInput,
+    payload: IngestTurnData,
     link: dict[str, Any],
     target_title: str,
 ) -> dict[str, Any]:

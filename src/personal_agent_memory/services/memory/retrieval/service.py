@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from personal_agent_memory.contracts import GetContextInput
+from personal_agent_memory.contracts.memory import GetContextData
 from personal_agent_memory.providers.embeddings import EmbeddingProvider
 from personal_agent_memory.repository import PostgresMemoryRepository
 from personal_agent_memory.services.memory.retrieval.policy import (
@@ -31,7 +31,7 @@ class RetrievalService:
         self.embedding_provider = embedding_provider
         self.config = config
 
-    async def get_context(self, payload: GetContextInput) -> dict[str, Any]:
+    async def get_context(self, payload: GetContextData) -> dict[str, Any]:
         query_plan = await self._build_query_plan(payload)
         seed_items = await self._retrieve_seed_items(
             payload=payload,
@@ -73,7 +73,7 @@ class RetrievalService:
     async def _retrieve_seed_items(
         self,
         *,
-        payload: GetContextInput,
+        payload: GetContextData,
         query_embedding: list[float],
     ) -> list[dict[str, Any]]:
         seed_rows = await self._search_seed_rows(payload, query_embedding)
@@ -83,7 +83,7 @@ class RetrievalService:
             include_chunks=payload.include_chunks,
         )
 
-    async def _build_query_plan(self, payload: GetContextInput) -> RetrievalQueryPlan:
+    async def _build_query_plan(self, payload: GetContextData) -> RetrievalQueryPlan:
         input_embedding = await self.embedding_provider.embed_text(payload.input)
         relevant_diaries = await self._load_relevant_recent_diaries(
             payload=payload,
@@ -109,7 +109,7 @@ class RetrievalService:
 
     async def _search_seed_rows(
         self,
-        payload: GetContextInput,
+        payload: GetContextData,
         query_embedding: list[float],
     ) -> list[dict[str, Any]]:
         semantic_rows = await self._search_semantic_seed_rows(payload, query_embedding)
@@ -118,7 +118,7 @@ class RetrievalService:
 
     async def _search_semantic_seed_rows(
         self,
-        payload: GetContextInput,
+        payload: GetContextData,
         query_embedding: list[float],
     ) -> list[dict[str, Any]]:
         return await self.repository.memory_chunks.search(
@@ -130,7 +130,7 @@ class RetrievalService:
 
     async def _search_tag_seed_rows(
         self,
-        payload: GetContextInput,
+        payload: GetContextData,
         query_embedding: list[float],
     ) -> list[dict[str, Any]]:
         if self.config.tag_retrieval_max_tags <= 0:
@@ -160,7 +160,7 @@ class RetrievalService:
     async def _retrieve_linked_items(
         self,
         *,
-        payload: GetContextInput,
+        payload: GetContextData,
         query_embedding: list[float],
         seed_items: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
@@ -213,7 +213,7 @@ class RetrievalService:
     async def _load_relevant_recent_diaries(
         self,
         *,
-        payload: GetContextInput,
+        payload: GetContextData,
         query_embedding: list[float],
     ) -> list[dict[str, Any]]:
         if not payload.diary_lookback_days or self.config.recent_diary_max_items <= 0:
@@ -238,7 +238,7 @@ class RetrievalService:
     async def _log_retrieval_events(
         self,
         item_ids: list[str],
-        payload: GetContextInput,
+        payload: GetContextData,
     ) -> None:
         for item_id in item_ids:
             await self.repository.memory_item_events.create(
