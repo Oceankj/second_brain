@@ -42,7 +42,7 @@
     "host": "0.0.0.0",
     "port": 8001,
     "path": "/mcp",
-    "public_url": "https://second-brain-x2iu.onrender.com",
+    "public_url": "https://second-brain-x2iu.onrender.com/mcp",
     "allowed_hosts": ["second-brain-x2iu.onrender.com"],
     "allowed_origins": ["https://second-brain-x2iu.onrender.com"],
     "max_request_body_size": 4194304
