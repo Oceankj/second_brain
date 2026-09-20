@@ -52,7 +52,7 @@ flowchart LR
 
 | 錯誤 | 使用時機 |
 | --- | --- |
-| `invalid_request` | 缺少欄位、重複欄位、錯誤 Content-Type 或未知欄位 |
+| `invalid_request` | 缺少欄位、重複欄位或錯誤 Content-Type |
 | `invalid_client` | 提交 client secret、client assertion 或 HTTP Authorization |
 | `invalid_grant` | Code、PKCE、refresh token、callback、client 或 resource 不符，或憑證已過期／使用／撤銷 |
 | `invalid_scope` | Refresh 要求超出原始授權範圍 |
@@ -62,3 +62,5 @@ flowchart LR
 所有回應都帶有 `Cache-Control: no-store` 與 `Pragma: no-cache`。請求 body 上限為 16 KiB；每個服務程序每分鐘最多處理 120 次嘗試。多程序部署仍應由入口服務提供共用流量限制。
 
 目前只支援 public client 的 `token_endpoint_auth_method=none`，不接受 client secret。Token 端點的查詢、一次性消耗與 token 建立會在同一筆 PostgreSQL 交易內完成。
+
+依 OAuth 規格，Token 請求中未識別的擴充參數會被忽略；已知但不支援的 client authentication 欄位仍會被拒絕。伺服器只會在日誌中記錄安全的拒絕原因，不會記錄授權碼、Token、PKCE verifier 或使用者憑證。

@@ -66,6 +66,27 @@ async def test_code_exchange_uses_pkce_and_returns_opaque_tokens(token_app):
 
 
 @pytest.mark.anyio
+async def test_code_exchange_ignores_optional_and_extension_parameters(token_app):
+    app, tokens = token_app
+    form = {
+        "grant_type": "authorization_code",
+        "code": "authorization-code-secret",
+        "client_id": "client",
+        "redirect_uri": "https://chatgpt.com/callback",
+        "resource": "https://memory.test/mcp",
+        "code_verifier": VERIFIER,
+        "scope": "memory:read",
+        "chatgpt_extension": "ignored",
+    }
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="https://memory.test"
+    ) as client:
+        response = await client.post("/oauth/token", data=form)
+    assert response.status_code == 200
+    tokens.exchange_authorization_code.assert_awaited_once()
+
+
+@pytest.mark.anyio
 async def test_refresh_rotates_token_and_can_downscope(token_app):
     app, tokens = token_app
     form = {
