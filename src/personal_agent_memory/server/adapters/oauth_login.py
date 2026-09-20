@@ -199,10 +199,12 @@ class LoginHandler:
         return response
 
     async def submit(self, request: Request) -> Response:
-        if (request.headers.get('origin') not in (None, self.context.settings.oauth_base_url)
-                or request.headers.get('content-type', '').split(';')[0].strip()
+        origin = request.headers.get('origin')
+        if origin not in (None, 'null', self.context.settings.oauth_base_url):
+            return self.form_invalid('origin_mismatch')
+        if (request.headers.get('content-type', '').split(';')[0].strip()
                 != 'application/x-www-form-urlencoded'):
-            return self.form_invalid('origin_or_content_type')
+            return self.form_invalid('invalid_content_type')
         body = bytearray()
         async for chunk in request.stream():
             if len(body) + len(chunk) > 16384:
@@ -267,10 +269,12 @@ class LoginHandler:
         return recovery_page()
 
     async def clear_session(self, request: Request) -> Response:
-        if (request.headers.get('origin') not in (None, self.context.settings.oauth_base_url)
-                or request.headers.get('content-type', '').split(';')[0].strip()
+        origin = request.headers.get('origin')
+        if origin not in (None, 'null', self.context.settings.oauth_base_url):
+            return self.form_invalid('session_clear_origin_mismatch')
+        if (request.headers.get('content-type', '').split(';')[0].strip()
                 != 'application/x-www-form-urlencoded'):
-            return self.form_invalid('invalid_session_clear_request')
+            return self.form_invalid('session_clear_invalid_content_type')
         response = recovery_page(cleared=True)
         response.delete_cookie(self.cookie, path='/', secure=self.secure,
                                httponly=True, samesite='lax')

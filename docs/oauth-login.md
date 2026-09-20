@@ -86,7 +86,7 @@ Code 綁定 user、client、redirect URI、resource、scopes 與 PKCE challenge�
 | 本機 HTTP cookie | `memory-oauth-local`，僅供 loopback 開發 |
 | 成功登入 | 保留短效瀏覽器 session，只消耗目前授權請求 |
 | 拒絕授權 | 只消耗目前授權請求，不要求密碼 |
-| 表單保護 | 每筆 CSRF token 由 session secret 與 request ID 導出；若有 Origin header，必須符合設定的公開 origin |
+| 表單保護 | 每筆 CSRF token 由 session secret 與 request ID 導出；Origin 必須是公開 origin、未提供，或受限 webview 的 `null` |
 | 無效或過期 | 顯示復原頁，提供「返回」及「清除登入狀態」 |
 
 有效 session 會在開啟新授權頁時延長至 10 分鐘。同一瀏覽器可以同時開啟多個授權頁；每一頁擁有獨立 request 與 CSRF token，完成其中一頁不會讓其他頁面立即失效。目前仍不提供免密碼再次授權。

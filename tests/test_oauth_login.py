@@ -144,7 +144,9 @@ async def test_invalid_authorization_requests(app, repository, change):
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize('failure', ['csrf', 'cookie', 'origin', 'expired', 'duplicate'])
+@pytest.mark.parametrize('failure', [
+    'csrf', 'cookie', 'origin', 'content-type', 'expired', 'duplicate',
+])
 async def test_invalid_form_cannot_issue_code(app, repository, failure):
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                  base_url='https://memory.test') as browser:
@@ -158,16 +160,19 @@ async def test_invalid_form_cannot_issue_code(app, repository, failure):
             browser.cookies.clear()
         if failure == 'origin':
             headers['origin'] = 'https://evil.test'
-        if failure == 'expired':
-            repository.oauth_authorizations.get_pending.side_effect = None
-            repository.oauth_authorizations.get_pending.return_value = None
-        if failure == 'duplicate':
-            response = await browser.post('/oauth/authorize',
-                                          content='decision=approve&decision=deny',
-                                          headers={'content-type':
-                                                   'application/x-www-form-urlencoded'})
+        if failure == 'content-type':
+            response = await browser.post('/oauth/authorize', content='request_id=x')
         else:
-            response = await browser.post('/oauth/authorize', data=form, headers=headers)
+            if failure == 'expired':
+                repository.oauth_authorizations.get_pending.side_effect = None
+                repository.oauth_authorizations.get_pending.return_value = None
+            if failure == 'duplicate':
+                response = await browser.post('/oauth/authorize',
+                                              content='decision=approve&decision=deny',
+                                              headers={'content-type':
+                                                       'application/x-www-form-urlencoded'})
+            else:
+                response = await browser.post('/oauth/authorize', data=form, headers=headers)
         assert response.status_code == 400
         assert response.headers['content-type'].startswith('text/html')
         assert '授權請求已失效' in response.text
@@ -175,6 +180,19 @@ async def test_invalid_form_cannot_issue_code(app, repository, failure):
         assert '清除登入狀態' in response.text
     repository.oauth_authorizations.finish.assert_not_called()
     repository.users.find_login.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_opaque_origin_can_submit_valid_csrf_protected_form(app):
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                 base_url='https://memory.test') as browser:
+        page = await browser.get('/oauth/authorize', params=PARAMS)
+        response = await browser.post('/oauth/authorize', data={
+            **form_values(page), 'decision': 'approve', 'username': 'alice',
+            'password': 'correct private password',
+        }, headers={'origin': 'null'})
+        assert response.status_code == 303
+        assert 'code=' in response.headers['location']
 
 
 @pytest.mark.anyio
