@@ -72,9 +72,9 @@ async def token_database(database_repository):  # noqa: F811
     conn, repository, _ = database_repository
     await conn.execute(
         """insert into oauth_login_sessions
-        (session_hash, csrf_token_hash, user_id, expires_at)
-        values (%s, %s, 'alice', clock_timestamp() + interval '10 minutes')""",
-        ("1" * 64, "2" * 64),
+        (session_hash, user_id, expires_at)
+        values (%s, 'alice', clock_timestamp() + interval '10 minutes')""",
+        ("1" * 64,),
     )
     await conn.execute(
         """insert into oauth_authorization_requests

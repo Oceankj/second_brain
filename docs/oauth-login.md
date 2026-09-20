@@ -1,4 +1,4 @@
-# OAuth 登入與授權（Phase 5）
+# OAuth 登入、授權與復原（Phase 5、Phase 8）
 
 Phase 5 已提供 `GET /oauth/authorize` 與 `POST /oauth/authorize`。使用者可以登入、確認權限或拒絕授權；成功時回傳一次性 authorization code。Phase 6 已提供 [Token 兌換與更新](oauth-token.md)，可以完成 ChatGPT 的 OAuth 連線流程。
 
@@ -25,13 +25,15 @@ sequenceDiagram
     Client->>User: 開啟授權網址
     User->>Auth: GET /oauth/authorize，帶上授權參數
     Auth->>DB: 查詢 client，核對 callback 與權限
-    Auth->>DB: 保存 session、CSRF hash 與待處理請求
+    Auth->>DB: 建立或沿用短效 session，保存待處理請求
+    Auth->>Auth: 以 session secret 與 request ID 導出專屬 CSRF token
     Auth-->>User: 登入與授權表單，設定 HttpOnly cookie
     User->>Auth: POST 表單，附上帳號密碼、CSRF token 與 cookie
-    Auth->>DB: 確認請求、session 與 CSRF，查詢帳號
+    Auth->>Auth: 確認 Origin 與專屬 CSRF token
+    Auth->>DB: 確認請求、session 與期限，查詢帳號
     Auth->>Auth: 以 Argon2id 驗證密碼
     Auth->>DB: 交易中鎖定記錄，重新確認 client 與帳號
-    Auth->>DB: 建立 code hash，消耗請求並輪替 session
+    Auth->>DB: 建立 code hash 並只消耗目前請求
     Auth-->>User: 303，導向已登記的 callback
     User->>Client: 帶回 code、原始 state 與 issuer
     Client->>Auth: 使用 code 與 PKCE verifier 兌換 token
@@ -61,18 +63,18 @@ sequenceDiagram
 ```mermaid
 flowchart TD
     Submit["收到授權表單"] --> Check["檢查 cookie、CSRF 與請求期限"]
-    Check -->|"無效"| Invalid["400，不發行 code"]
+    Check -->|"無效"| Invalid["顯示失效頁，不發行 code"]
     Check -->|"有效"| Decision{"使用者的決定"}
-    Decision -->|"拒絕"| Deny["消耗請求、撤銷 session，回傳 access_denied"]
+    Decision -->|"拒絕"| Deny["只消耗目前請求，回傳 access_denied"]
     Decision -->|"允許"| Login["驗證帳號密碼"]
     Login -->|"失敗"| Retry["顯示相同錯誤訊息，可重新輸入"]
     Login -->|"成功"| Transaction["交易中重新檢查並鎖定授權記錄"]
-    Transaction --> Issue["發行一次性 code，輪替 session"]
+    Transaction --> Issue["發行一次性 code，只消耗目前請求"]
 ```
 
 Code 綁定 user、client、redirect URI、resource、scopes 與 PKCE challenge。資料庫只保存 code 的 SHA-256 hash，原始 code 只出現在 callback。
 
-完成授權的資料庫交易會重新檢查期限、client 撤銷狀態、callback、權限、帳號啟用狀態及密碼 hash，防止表單開啟後設定改變，卻仍以舊狀態發行 code。請求消耗、code 建立與 session 輪替一起提交；同一請求不能重複發行 code。
+完成授權的資料庫交易會重新檢查期限、client 撤銷狀態、callback、權限、帳號啟用狀態及密碼 hash，防止表單開啟後設定改變，卻仍以舊狀態發行 code。請求消耗與 code 建立一起提交；同一請求不能重複發行 code。
 
 ## Session、CSRF 與期限
 
@@ -82,13 +84,16 @@ Code 綁定 user、client、redirect URI、resource、scopes 與 PKCE challenge�
 | Authorization code | 5 分鐘，只能兌換一次 |
 | 正式環境 cookie | `__Host-memory-oauth`，`Secure`、`HttpOnly`、`SameSite=Lax`、`Path=/` |
 | 本機 HTTP cookie | `memory-oauth-local`，僅供 loopback 開發 |
-| 成功登入 | 建立新的 session secret，撤銷舊 session |
-| 拒絕授權 | 消耗請求、撤銷 session 並清除 cookie，不要求密碼 |
-| 表單保護 | CSRF token 與 server-side session 綁定；若有 Origin header，必須符合設定的公開 origin |
+| 成功登入 | 保留短效瀏覽器 session，只消耗目前授權請求 |
+| 拒絕授權 | 只消耗目前授權請求，不要求密碼 |
+| 表單保護 | 每筆 CSRF token 由 session secret 與 request ID 導出；若有 Origin header，必須符合設定的公開 origin |
+| 無效或過期 | 顯示復原頁，提供「返回」及「清除登入狀態」 |
 
-每次開啟授權頁都建立新的 session，目前不提供免密碼再次授權；同一瀏覽器同時開啟多個授權頁時，新 cookie 會取代舊 cookie，舊頁面需重新開始。
+有效 session 會在開啟新授權頁時延長至 10 分鐘。同一瀏覽器可以同時開啟多個授權頁；每一頁擁有獨立 request 與 CSRF token，完成其中一頁不會讓其他頁面立即失效。目前仍不提供免密碼再次授權。
 
-Session 與 CSRF 都是安全亂數，資料庫只保存 hash，因此這個實作不需要額外的 cookie 簽章密鑰。密碼驗證在背景執行緒執行，避免 Argon2id 計算阻塞 HTTP event loop。
+Session 與 request ID 都是安全亂數，資料庫只保存 hash。CSRF token 使用 HMAC-SHA-256 從瀏覽器 session secret 與 request ID 導出，不需要保存原始 token，也不需要額外的 cookie 簽章密鑰。密碼驗證在背景執行緒執行，避免 Argon2id 計算阻塞 HTTP event loop。
+
+失效頁不會向瀏覽器透露 cookie 遺失、CSRF 不一致或請求過期等具體原因。伺服器日誌只記錄不含 token、帳號與密碼的原因代碼，供除錯使用。「清除登入狀態」只刪除短效瀏覽器 cookie，不會刪除 OAuth client、token 或使用者。
 
 ## 請求限制與測試
 

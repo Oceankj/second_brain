@@ -70,9 +70,11 @@ erDiagram
 | 資料表 | 保存什麼？ | 為什麼需要？ |
 | --- | --- | --- |
 | `oauth_clients` | Client ID、名稱、允許的 redirect URIs、撤銷時間 | 辨識應用程式，提供 callback 網址的比對依據 |
-| `oauth_login_sessions` | Session hash、CSRF token hash、使用者、期限 | 追蹤瀏覽器的登入狀態；登入前 `user_id` 可以是 `NULL` |
+| `oauth_login_sessions` | Session hash、使用者、期限 | 追蹤瀏覽器的短效登入狀態；登入前 `user_id` 可以是 `NULL` |
 | `oauth_authorization_requests` | Session、client、callback、resource、scopes、state、PKCE challenge | 在使用者操作登入頁期間，保存授權的原始要求 |
 | `oauth_authorization_codes` | Code hash、授權請求、使用者、client、授權參數、期限、使用時間 | 讓 ChatGPT 以一次性 code 兌換 token |
+
+`oauth_login_sessions.csrf_token_hash` 是舊版相容欄位。Phase 8 起不再讀取，新 session 允許留空；待完成安全滾動部署後才能另行移除。
 
 `state` 是 client 傳入、需要原樣帶回 callback 的值。`code_challenge` 是 PKCE 的驗證依據；原始 `code_verifier` 不儲存在資料庫。
 

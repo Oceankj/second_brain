@@ -1,6 +1,9 @@
 """Browser authorization flow. Raw credentials are never logged or persisted."""
 
+import base64
+import hashlib
 import hmac
+import logging
 import re
 import secrets
 import time
@@ -28,6 +31,8 @@ HEADERS = {
     'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; "
                                "form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
 }
+LOGGER = logging.getLogger(__name__)
+RETURN_URL = 'https://chatgpt.com/'
 
 
 def callback(uri: str, issuer: str, state: str | None, **result: str) -> Response:
@@ -85,6 +90,38 @@ autocomplete="current-password" maxlength="1024" required>
 </main></body></html>''', headers=headers, status_code=401 if error else 200)
 
 
+def csrf_token(session: str, request_id: str) -> str:
+    digest = hmac.new(session.encode('ascii'), request_id.encode('ascii'), hashlib.sha256).digest()
+    return base64.urlsafe_b64encode(digest).rstrip(b'=').decode('ascii')
+
+
+def recovery_page(*, cleared: bool = False) -> HTMLResponse:
+    title = '登入狀態已清除' if cleared else '授權請求已失效'
+    message = ('請返回後重新開始連線。' if cleared else
+               '此授權請求已過期或不再有效，請重新開始連線。')
+    clear = '' if cleared else '''
+<form method="post" action="/oauth/session/clear">
+<button type="submit" class="secondary">清除登入狀態</button>
+</form>'''
+    return HTMLResponse(f'''<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title} · Personal Agent Memory</title>
+<style>
+body {{font-family:system-ui,sans-serif;background:#f4f5f7;color:#18202b;
+margin:0;padding:32px 16px}}
+main {{max-width:440px;margin:10vh auto;background:white;padding:32px;border-radius:16px}}
+h1 {{font-size:1.6rem}} p {{line-height:1.7}}
+a,button {{display:inline-block;box-sizing:border-box;padding:12px 18px;margin:12px 8px 0 0;
+border:0;border-radius:6px;font:inherit;text-decoration:none;cursor:pointer;
+background:#1747a6;color:white}}
+form {{display:inline}} button.secondary {{background:#e9edf4;color:#18202b}}
+</style></head><body><main><small>Personal Agent Memory</small>
+<h1>{title}</h1><p>{message}</p>
+<a href="{RETURN_URL}">返回</a>{clear}
+</main></body></html>''', status_code=200 if cleared else 400, headers=HEADERS)
+
+
 class LoginHandler:
     def __init__(self, context: ApplicationContext) -> None:
         self.context = context
@@ -118,13 +155,13 @@ class LoginHandler:
     async def start(self, request: Request) -> Response:
         pairs = request.query_params.multi_items()
         if len(request.scope.get('query_string', b'')) > 8192 or len(pairs) != len(dict(pairs)):
-            return self.invalid()
+            return self.initial_invalid()
         params = dict(pairs)
         repository = self.context.repository()
         client = await repository.oauth_clients.get(params.get('client_id', ''))
         uri = params.get('redirect_uri', '')
         if not client or uri not in client['redirect_uris']:
-            return self.invalid()  # Never redirect to an unverified URI.
+            return self.initial_invalid()  # Never redirect to an unverified URI.
         state = params.get('state')
         error = None
         if params.get('response_type') != 'code':
@@ -141,14 +178,22 @@ class LoginHandler:
             error = 'invalid_scope'
         if error:
             return callback(uri, self.context.settings.oauth_issuer_url, state, error=error)
-        session, csrf, request_id = (secrets.token_urlsafe(32) for _ in range(3))
+        current_session = request.cookies.get(self.cookie, '')
+        if not re.fullmatch(r'[A-Za-z0-9_-]{43}', current_session):
+            current_session = ''
+        new_session, request_id = (secrets.token_urlsafe(32) for _ in range(2))
         pending = {
-            'request_hash': hash_token(request_id), 'session_hash': hash_token(session),
+            'request_hash': hash_token(request_id), 'session_hash': hash_token(new_session),
             'client_id': client['client_id'], 'client_name': client['client_name'],
             'redirect_uri': uri, 'resource': self.resource, 'scopes': scopes, 'state': state,
             'code_challenge': params['code_challenge'],
         }
-        await repository.oauth_authorizations.create(pending, hash_token(csrf))
+        reused = await repository.oauth_authorizations.create(
+            pending,
+            hash_token(current_session) if current_session else None,
+        )
+        session = current_session if reused else new_session
+        csrf = csrf_token(session, request_id)
         response = login_page(pending, request_id, csrf)
         self.set_cookie(response, session)
         return response
@@ -157,67 +202,84 @@ class LoginHandler:
         if (request.headers.get('origin') not in (None, self.context.settings.oauth_base_url)
                 or request.headers.get('content-type', '').split(';')[0].strip()
                 != 'application/x-www-form-urlencoded'):
-            return self.invalid()
+            return self.form_invalid('origin_or_content_type')
         body = bytearray()
         async for chunk in request.stream():
             if len(body) + len(chunk) > 16384:
-                return self.invalid()
+                return self.form_invalid('body_too_large')
             body.extend(chunk)
         try:
             pairs = parse_qsl(body.decode('utf-8'), keep_blank_values=True, max_num_fields=8)
         except (ValueError, UnicodeError):
-            return self.invalid()
+            return self.form_invalid('malformed_form')
         if len(pairs) != len(dict(pairs)):
-            return self.invalid()
+            return self.form_invalid('duplicate_fields')
         form = dict(pairs)
         session = request.cookies.get(self.cookie, '')
         request_id, csrf = form.get('request_id', ''), form.get('csrf_token', '')
         if not all(re.fullmatch(r'[A-Za-z0-9_-]{43}', v) for v in (session, request_id, csrf)):
-            return self.invalid()
+            return self.form_invalid('missing_or_malformed_state')
+        expected_csrf = csrf_token(session, request_id)
+        if not hmac.compare_digest(csrf, expected_csrf):
+            return self.form_invalid('csrf_mismatch')
         repository = self.context.repository()
         authorizations = repository.oauth_authorizations
-        request_hash, session_hash, csrf_hash = map(hash_token, (request_id, session, csrf))
+        request_hash, session_hash = map(hash_token, (request_id, session))
         pending = await authorizations.get_pending(request_hash, session_hash)
-        if not pending or not hmac.compare_digest(pending['csrf_token_hash'], csrf_hash):
-            return self.invalid()
+        if not pending:
+            return self.form_invalid('session_or_request_expired')
         decision = form.get('decision')
         if decision == 'deny':
-            completed = await authorizations.finish(request_hash, session_hash, csrf_hash)
+            completed = await authorizations.finish(request_hash, session_hash)
             if not completed:
-                return self.invalid()
+                return self.form_invalid('authorization_race')
             response = callback(completed['redirect_uri'], self.context.settings.oauth_issuer_url,
                                 completed['state'], error='access_denied')
-            response.delete_cookie(self.cookie, path='/', secure=self.secure,
-                                   httponly=True, samesite='lax')
             return response
         if decision != 'approve':
-            return self.invalid()
+            return self.form_invalid('invalid_decision')
         username, password = form.get('username', ''), form.get('password', '')
         if len(username) > 256 or len(password) > 1024:
-            return self.invalid()
+            return self.form_invalid('oversized_credentials')
         user = await repository.users.find_login(username.lower())
         encoded = user['password_hash'] if user and user['password_hash'] else self.dummy_hash
         valid = await run_in_threadpool(verify_password, password, encoded)
         if not valid or not user or not user['is_active'] or not user['password_hash']:
             return login_page(pending, request_id, csrf, '帳號或密碼不正確，請再試一次。')
-        code, new_session, new_csrf = (secrets.token_urlsafe(32) for _ in range(3))
+        code = secrets.token_urlsafe(32)
         completed = await authorizations.finish(
-            request_hash, session_hash, csrf_hash, user_id=user['id'], password_hash=encoded,
-            code_hash=hash_token(code), new_session_hash=hash_token(new_session),
-            new_csrf_hash=hash_token(new_csrf),
+            request_hash, session_hash, user_id=user['id'], password_hash=encoded,
+            code_hash=hash_token(code),
         )
         if not completed:
-            return self.invalid()
+            return self.form_invalid('authorization_race')
         response = callback(completed['redirect_uri'], self.context.settings.oauth_issuer_url,
                             completed['state'], code=code)
-        self.set_cookie(response, new_session)
         return response
 
     @staticmethod
-    def invalid() -> Response:
+    def initial_invalid() -> Response:
         return JSONResponse({'error': 'invalid_request'}, status_code=400, headers=HEADERS)
+
+    @staticmethod
+    def form_invalid(reason: str) -> Response:
+        LOGGER.warning('OAuth authorization form rejected: %s', reason)
+        return recovery_page()
+
+    async def clear_session(self, request: Request) -> Response:
+        if (request.headers.get('origin') not in (None, self.context.settings.oauth_base_url)
+                or request.headers.get('content-type', '').split(';')[0].strip()
+                != 'application/x-www-form-urlencoded'):
+            return self.form_invalid('invalid_session_clear_request')
+        response = recovery_page(cleared=True)
+        response.delete_cookie(self.cookie, path='/', secure=self.secure,
+                               httponly=True, samesite='lax')
+        return response
 
 
 def login_routes(context: ApplicationContext) -> list[Route]:
     handler = LoginHandler(context)
-    return [Route('/oauth/authorize', handler.handle, methods=['GET', 'POST'])]
+    return [
+        Route('/oauth/authorize', handler.handle, methods=['GET', 'POST']),
+        Route('/oauth/session/clear', handler.clear_session, methods=['POST']),
+    ]

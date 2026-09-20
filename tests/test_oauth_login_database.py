@@ -37,7 +37,10 @@ async def database_repository():
         await conn.execute(sql.SQL('set local search_path to {}').format(sql.Identifier(schema)))
         await conn.execute('''create table users (id text primary key, username text unique,
             password_hash text, is_active boolean not null default true)''')
-        for name in ('003_oauth_storage.sql', '004_oauth_client_metadata.sql'):
+        for name in (
+            '003_oauth_storage.sql', '004_oauth_client_metadata.sql',
+            '005_oauth_session_recovery.sql',
+        ):
             migration = (Path(__file__).resolve().parents[1] / 'migrations' / name).read_text()
             await conn.execute(migration.strip().removeprefix('begin;').removesuffix('commit;'))
         encoded = hash_password('correct private password')
@@ -86,11 +89,9 @@ async def test_browser_approval_persists_only_hashes_and_cannot_replay(database_
         assert 290 <= (code['expires_at'] - code['created_at']).total_seconds() <= 310
         cursor = await conn.execute('select * from oauth_login_sessions where session_hash = %s',
                                     (hash_token(original_cookie),))
-        assert (await cursor.fetchone())['revoked_at'] is not None
-        # Restore the old cookie to exercise the database replay checks as well.
-        browser.cookies.clear()
-        browser.cookies.set('__Host-memory-oauth', original_cookie)
-        assert (await browser.post('/oauth/authorize', data=form)).status_code == 400
+        assert (await cursor.fetchone())['revoked_at'] is None
+        replay = await browser.post('/oauth/authorize', data=form)
+        assert replay.status_code == 400 and '授權請求已失效' in replay.text
         cursor = await conn.execute('select count(*) as n from oauth_authorization_codes')
         assert (await cursor.fetchone())['n'] == 1
 
@@ -116,12 +117,33 @@ async def test_transaction_revalidates_expiry_client_and_user(database_repositor
         'scopes': ['memory:read'], 'state': 'test', 'code_challenge': 'A' * 43,
     }
     auth = repository.oauth_authorizations
-    await auth.create(pending, 'c' * 64)
+    await auth.create(pending)
     assert await auth.get_pending('a' * 64, 'b' * 64)
     await conn.execute(mutation)
     assert await auth.finish(
-        'a' * 64, 'b' * 64, 'c' * 64, user_id='alice', password_hash=encoded,
-        code_hash='d' * 64, new_session_hash='e' * 64, new_csrf_hash='f' * 64,
+        'a' * 64, 'b' * 64, user_id='alice', password_hash=encoded,
+        code_hash='d' * 64,
     ) is None
     cursor = await conn.execute('select count(*) as n from oauth_authorization_codes')
     assert (await cursor.fetchone())['n'] == 0
+
+
+@pytest.mark.anyio
+async def test_two_pages_reuse_session_and_can_finish_independently(database_repository):
+    _, repository, _ = database_repository
+    context = ApplicationContext(Settings(database_url='postgresql://example',
+                                          public_base_url='https://memory.test'))
+    context._repository = repository
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(
+        app=Starlette(routes=login_routes(context))), base_url='https://memory.test',
+    ) as browser:
+        first = await browser.get('/oauth/authorize', params=PARAMS)
+        cookie = browser.cookies.get('__Host-memory-oauth')
+        second = await browser.get('/oauth/authorize', params={**PARAMS, 'state': 'second'})
+        assert browser.cookies.get('__Host-memory-oauth') == cookie
+        for page in (first, second):
+            response = await browser.post('/oauth/authorize', data={
+                **form_values(page), 'username': 'alice',
+                'password': 'correct private password', 'decision': 'approve',
+            })
+            assert response.status_code == 303

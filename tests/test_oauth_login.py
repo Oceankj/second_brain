@@ -39,15 +39,20 @@ def repository():
     }
     authorizations = AsyncMock()
     rows = {}
+    sessions = set()
 
-    async def create(pending, csrf_hash):
-        rows[pending['request_hash']] = {**pending, 'csrf_token_hash': csrf_hash}
+    async def create(pending, current_session_hash=None):
+        reused = current_session_hash in sessions
+        session_hash = current_session_hash if reused else pending['session_hash']
+        sessions.add(session_hash)
+        rows[pending['request_hash']] = {**pending, 'session_hash': session_hash}
+        return reused
 
     async def get_pending(request_hash, session_hash):
         pending = rows.get(request_hash)
         return pending if pending and pending['session_hash'] == session_hash else None
 
-    async def finish(request_hash, session_hash, csrf_hash, **kwargs):
+    async def finish(request_hash, session_hash, **kwargs):
         return rows.pop(request_hash, None)
 
     authorizations.create.side_effect = create
@@ -65,7 +70,7 @@ def app(repository):
 
 
 @pytest.mark.anyio
-async def test_approve_rotates_cookie_and_binds_code(app, repository):
+async def test_approve_keeps_browser_session_and_binds_code(app, repository):
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                  base_url='https://memory.test') as browser:
         page = await browser.get('/oauth/authorize', params=PARAMS)
@@ -92,10 +97,28 @@ async def test_approve_rotates_cookie_and_binds_code(app, repository):
         args = repository.oauth_authorizations.finish.call_args.kwargs
         assert args['user_id'] == 'alice'
         assert args['code_hash'] == hash_token(params['code'][0])
-        assert args['new_session_hash'] == hash_token(browser.cookies.get('__Host-memory-oauth'))
-        assert browser.cookies.get('__Host-memory-oauth') != cookie
+        assert browser.cookies.get('__Host-memory-oauth') == cookie
         repository.users.find_login.assert_awaited_once_with('alice')
-        assert (await browser.post('/oauth/authorize', data=form)).status_code == 400
+        replay = await browser.post('/oauth/authorize', data=form)
+        assert replay.status_code == 400
+        assert '授權請求已失效' in replay.text
+
+
+@pytest.mark.anyio
+async def test_multiple_pages_share_one_session_and_remain_independent(app):
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                 base_url='https://memory.test') as browser:
+        first = await browser.get('/oauth/authorize', params=PARAMS)
+        cookie = browser.cookies.get('__Host-memory-oauth')
+        second = await browser.get('/oauth/authorize', params={**PARAMS, 'state': 'second'})
+        assert browser.cookies.get('__Host-memory-oauth') == cookie
+        for page in (first, second):
+            response = await browser.post('/oauth/authorize', data={
+                **form_values(page), 'decision': 'approve', 'username': 'alice',
+                'password': 'correct private password',
+            })
+            assert response.status_code == 303
+            assert 'code=' in response.headers['location']
 
 
 @pytest.mark.anyio
@@ -146,6 +169,10 @@ async def test_invalid_form_cannot_issue_code(app, repository, failure):
         else:
             response = await browser.post('/oauth/authorize', data=form, headers=headers)
         assert response.status_code == 400
+        assert response.headers['content-type'].startswith('text/html')
+        assert '授權請求已失效' in response.text
+        assert '>返回<' in response.text
+        assert '清除登入狀態' in response.text
     repository.oauth_authorizations.finish.assert_not_called()
     repository.users.find_login.assert_not_called()
 
@@ -185,9 +212,37 @@ async def test_deny_requires_csrf_but_not_password(app, repository):
         params = parse_qs(urlsplit(response.headers['location']).query)
         assert params['error'] == ['access_denied'] and 'code' not in params
         assert params['state'] == [PARAMS['state']]
-        assert browser.cookies.get('__Host-memory-oauth') is None
+        assert browser.cookies.get('__Host-memory-oauth') is not None
     repository.users.find_login.assert_not_called()
     assert repository.oauth_authorizations.finish.call_args.kwargs == {}
+
+
+@pytest.mark.anyio
+async def test_clear_session_removes_cookie(app):
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                 base_url='https://memory.test') as browser:
+        await browser.get('/oauth/authorize', params=PARAMS)
+        assert browser.cookies.get('__Host-memory-oauth')
+        response = await browser.post('/oauth/session/clear', content='', headers={
+            'content-type': 'application/x-www-form-urlencoded',
+        })
+        assert response.status_code == 200
+        assert browser.cookies.get('__Host-memory-oauth') is None
+        assert '登入狀態已清除' in response.text
+        assert '>返回<' in response.text
+
+
+@pytest.mark.anyio
+async def test_clear_session_rejects_cross_origin_request(app):
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                 base_url='https://memory.test') as browser:
+        await browser.get('/oauth/authorize', params=PARAMS)
+        response = await browser.post('/oauth/session/clear', content='', headers={
+            'content-type': 'application/x-www-form-urlencoded',
+            'origin': 'https://evil.test',
+        })
+        assert response.status_code == 400
+        assert browser.cookies.get('__Host-memory-oauth') is not None
 
 
 @pytest.mark.anyio

@@ -11,7 +11,10 @@ import psycopg
 import pytest
 from psycopg import sql
 
-MIGRATION = Path(__file__).resolve().parents[1] / "migrations/003_oauth_storage.sql"
+MIGRATIONS = tuple(
+    Path(__file__).resolve().parents[1] / "migrations" / name
+    for name in ("003_oauth_storage.sql", "005_oauth_session_recovery.sql")
+)
 TABLES = {
     "oauth_clients", "oauth_login_sessions", "oauth_authorization_requests",
     "oauth_authorization_codes", "oauth_token_families", "oauth_refresh_tokens",
@@ -31,9 +34,10 @@ def db():
         conn.execute(sql.SQL("set local search_path to {}").format(sql.Identifier(schema)))
         conn.execute("create table users (id text primary key)")
         conn.execute("insert into users values ('test-user')")
-        migration = MIGRATION.read_text().strip().removeprefix("begin;").removesuffix("commit;")
-        conn.execute(migration)
-        conn.execute(migration)  # Existing schema can be migrated again safely.
+        for path in MIGRATIONS:
+            migration = path.read_text().strip().removeprefix("begin;").removesuffix("commit;")
+            conn.execute(migration)
+            conn.execute(migration)  # Existing schema can be migrated again safely.
         yield conn
     finally:
         conn.rollback()
@@ -44,8 +48,8 @@ def seed(db):
     db.execute("""insert into oauth_clients (client_id, redirect_uris)
         values ('test-client', array['https://example.com/callback'])""")
     db.execute("""insert into oauth_login_sessions
-        (session_hash, csrf_token_hash, expires_at)
-        values (%s, %s, now() + interval '10 minutes')""", ("a" * 64, "b" * 64))
+        (session_hash, expires_at)
+        values (%s, now() + interval '10 minutes')""", ("a" * 64,))
     db.execute("""insert into oauth_authorization_requests
         (request_hash, session_hash, client_id, redirect_uri, resource, scopes,
          state, code_challenge, expires_at)
