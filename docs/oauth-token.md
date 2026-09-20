@@ -64,3 +64,5 @@ flowchart LR
 目前只支援 public client 的 `token_endpoint_auth_method=none`，不接受 client secret。Token 端點的查詢、一次性消耗與 token 建立會在同一筆 PostgreSQL 交易內完成。
 
 依 OAuth 規格，Token 請求中未識別的擴充參數會被忽略；已知但不支援的 client authentication 欄位仍會被拒絕。伺服器只會在日誌中記錄安全的拒絕原因，不會記錄授權碼、Token、PKCE verifier 或使用者憑證。
+
+Token 端點使用與受保護資源探索文件相同的標準 resource URL；當 resource 是網域根路徑時，會保留結尾的 `/`，以符合 OAuth 的精確字串比對要求。

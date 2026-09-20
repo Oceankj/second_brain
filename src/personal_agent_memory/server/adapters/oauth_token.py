@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from urllib.parse import parse_qsl
 
 import psycopg
+from pydantic import AnyHttpUrl
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
@@ -40,7 +41,9 @@ def oauth_error(error: str, status_code: int = 400, *, reason: str | None = None
 class TokenHandler:
     def __init__(self, context: ApplicationContext) -> None:
         self.context = context
-        self.resource = context.settings.oauth_resource_url
+        # Match the canonical value published by protected-resource metadata and
+        # stored by the authorization endpoint. AnyHttpUrl adds the root slash.
+        self.resource = str(AnyHttpUrl(context.settings.oauth_resource_url))
         self.attempts: deque[float] = deque()
 
     async def handle(self, request: Request) -> JSONResponse:

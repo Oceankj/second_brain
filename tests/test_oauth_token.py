@@ -87,6 +87,45 @@ async def test_code_exchange_ignores_optional_and_extension_parameters(token_app
 
 
 @pytest.mark.anyio
+async def test_code_exchange_uses_canonical_root_resource_url():
+    tokens = AsyncMock()
+    tokens.exchange_authorization_code.return_value = {
+        "user_id": "alice",
+        "client_id": "client",
+        "resource": "https://memory.test/",
+        "scopes": ["memory:read"],
+        "expires_at": datetime.now(UTC) + timedelta(hours=1),
+        "refresh_token_issued": True,
+    }
+    context = ApplicationContext(
+        Settings(
+            database_url="postgresql://example",
+            mcp_http_public_url="https://memory.test",
+        )
+    )
+    context._repository = SimpleNamespace(oauth_tokens=tokens)
+    app = Starlette(routes=token_routes(context))
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="https://memory.test"
+    ) as client:
+        response = await client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "authorization_code",
+                "code": "authorization-code-secret",
+                "client_id": "client",
+                "redirect_uri": "https://chatgpt.com/callback",
+                "resource": "https://memory.test/",
+                "code_verifier": VERIFIER,
+            },
+        )
+    assert response.status_code == 200
+    assert tokens.exchange_authorization_code.call_args.kwargs["resource"] == (
+        "https://memory.test/"
+    )
+
+
+@pytest.mark.anyio
 async def test_refresh_rotates_token_and_can_downscope(token_app):
     app, tokens = token_app
     form = {
