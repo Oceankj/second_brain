@@ -19,6 +19,7 @@ from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Re
 from starlette.routing import Route
 
 from personal_agent_memory.server.application import ApplicationContext
+from personal_agent_memory.server.auth.client_compatibility import extra_form_action_origins
 from personal_agent_memory.server.auth.transport import MCP_HTTP_SCOPES
 from personal_agent_memory.services.users import hash_password, hash_token, verify_password
 
@@ -56,8 +57,9 @@ def login_page(pending: dict, request_id: str, csrf: str, error: str = '') -> HT
     origin = f'{target.scheme}://{target.netloc}'
     if not re.fullmatch(r'https?://[A-Za-z0-9.\-:\[\]]+', origin):
         return HTMLResponse('無法使用此回呼網址。', status_code=400, headers=HEADERS)
+    form_destinations = ' '.join((origin, *extra_form_action_origins(pending['redirect_uri'])))
     headers = {**HEADERS, 'Content-Security-Policy': HEADERS['Content-Security-Policy'].replace(
-        "form-action 'self';", f"form-action 'self' {origin};",
+        "form-action 'self';", f"form-action 'self' {form_destinations};",
     )}
     return HTMLResponse(f'''<!doctype html>
 <html lang="zh-Hant"><head><meta charset="utf-8">

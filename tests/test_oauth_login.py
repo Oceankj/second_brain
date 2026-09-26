@@ -8,7 +8,7 @@ import pytest
 from starlette.applications import Starlette
 
 from personal_agent_memory.config import Settings
-from personal_agent_memory.server.adapters.oauth_login import login_routes
+from personal_agent_memory.server.adapters.oauth_login import login_page, login_routes
 from personal_agent_memory.server.application import ApplicationContext
 from personal_agent_memory.services.users import hash_password, hash_token
 
@@ -22,6 +22,28 @@ PARAMS = {
 
 def form_values(response):
     return dict(re.findall(r'name="(request_id|csrf_token)" value="([^"]+)"', response.text))
+
+
+@pytest.mark.parametrize('error', ['', '帳號或密碼不正確，請再試一次。'])
+@pytest.mark.parametrize(('redirect_uri', 'destinations'), [
+    ('https://agent.meta.ai/api/hatch/oauth/callback', 'https://agent.meta.ai https://muse.ai'),
+    ('https://chatgpt.com/connector_platform_oauth_redirect', 'https://chatgpt.com'),
+    ('https://client.test/callback', 'https://client.test'),
+    ('https://agent.meta.ai/other', 'https://agent.meta.ai'),
+    ('https://agent.meta.ai/api/hatch/oauth/callback/', 'https://agent.meta.ai'),
+    ('https://agent.meta.ai/api/hatch/oauth/callback?extra=1', 'https://agent.meta.ai'),
+    ('https://agent.meta.ai.evil.test/api/hatch/oauth/callback', 'https://agent.meta.ai.evil.test'),
+    ('http://agent.meta.ai/api/hatch/oauth/callback', 'http://agent.meta.ai'),
+])
+def test_login_csp_limits_muse_exception_to_exact_callback(redirect_uri, destinations, error):
+    response = login_page(
+        {'redirect_uri': redirect_uri, 'scopes': ['memory:write']}, 'request', 'csrf', error,
+    )
+    assert response.status_code == (401 if error else 200)
+    assert response.headers['content-security-policy'] == (
+        "default-src 'none'; style-src 'unsafe-inline'; "
+        f"form-action 'self' {destinations}; frame-ancestors 'none'; base-uri 'none'"
+    )
 
 
 @pytest.fixture
