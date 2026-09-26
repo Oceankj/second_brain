@@ -85,6 +85,9 @@ class TokenHandler:
             return oauth_error("temporarily_unavailable", 503, reason="database_unavailable")
 
     async def exchange_code(self, form: dict[str, str]) -> JSONResponse:
+        # Default only when absent; repository checks still bind the code to
+        # this resource, client, callback and PKCE challenge.
+        form = {"resource": self.resource, **form}
         required = ("code", "client_id", "redirect_uri", "resource", "code_verifier")
         if any(not form.get(field) for field in required):
             return oauth_error("invalid_request", reason="missing_code_exchange_field")
@@ -114,6 +117,8 @@ class TokenHandler:
         return self.success(result, access_token, refresh_token)
 
     async def refresh(self, form: dict[str, str]) -> JSONResponse:
+        # Keep the original token family's resource binding during rotation.
+        form = {"resource": self.resource, **form}
         required = ("refresh_token", "client_id", "resource")
         if any(not form.get(field) for field in required):
             return oauth_error("invalid_request", reason="missing_refresh_field")

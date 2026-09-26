@@ -28,7 +28,7 @@ sequenceDiagram
 | `code` | Phase 5 回傳的一次性 code |
 | `client_id` | 必須與授權 code 綁定的 public client 完全一致 |
 | `redirect_uri` | 必須與原始授權請求完全一致 |
-| `resource` | 必須與原始授權及目前 MCP resource 完全一致 |
+| `resource` | 可省略，預設為目前 MCP resource；明確提供時必須與原始授權及目前 MCP resource 完全一致 |
 | `code_verifier` | 43 至 128 字元，只接受 RFC 7636 的 unreserved characters |
 
 成功後，access token 有效期最長一小時；token family 有效期 30 天。只有 client 註冊了 `refresh_token` grant 時才會回傳 refresh token。原始 code 與 tokens 都不寫入資料庫，只保存 SHA-256 hash。
@@ -44,7 +44,7 @@ flowchart LR
     X --> D[同 family 的 access 與 refresh tokens 全部失效]
 ```
 
-更新請求包含 `grant_type=refresh_token`、`refresh_token`、`client_id` 與 `resource`。可選的 `scope` 只能縮小原始授權範圍，不能增加權限。每次成功更新都會回傳新的 refresh token；舊 token 立即標記為已使用。
+更新請求包含 `grant_type=refresh_token`、`refresh_token` 與 `client_id`；`resource` 可省略，使用目前 MCP resource。可選的 `scope` 只能縮小原始授權範圍，不能增加權限。每次成功更新都會回傳新的 refresh token；舊 token 立即標記為已使用。
 
 若已使用的 refresh token 再次出現，服務會把這次情況視為憑證可能外洩，並在同一筆資料庫交易中撤銷整個 family。即使舊 access token 尚未到期，Phase 7 的每次請求驗證也會因 family 已撤銷而拒絕它。
 
@@ -66,3 +66,32 @@ flowchart LR
 依 OAuth 規格，Token 請求中未識別的擴充參數會被忽略；已知但不支援的 client authentication 欄位仍會被拒絕。伺服器只會在日誌中記錄安全的拒絕原因，不會記錄授權碼、Token、PKCE verifier 或使用者憑證。
 
 Token 端點使用與受保護資源探索文件相同的標準 resource URL；當 resource 是網域根路徑時，會保留結尾的 `/`，以符合 OAuth 的精確字串比對要求。
+
+
+## Muse 等一般 OAuth client 的相容模式
+
+本服務只有一個 MCP resource，因此 authorize、authorization code 交換及 refresh
+請求省略 `resource` 時，都使用設定的標準 MCP resource URL。
+這符合 [RFC 8707](https://www.rfc-editor.org/rfc/rfc8707.html#section-2.1)
+允許伺服器使用預設 resource 的規則。明確傳入空值、其他 URL 或重複欄位仍會被拒絕。
+資料庫仍核對 code／token family 的 resource、client、callback 與 PKCE 綁定；
+MCP 存取驗證也仍要求 token 的 resource 完全相符。
+
+依 Muse 使用者提供的流程，自訂 OAuth 連接無法傳遞 `resource`。
+部署此變更後，不必再將 `resource` 塞進 authorization URL 的 query string：
+
+- MCP URL：`https://second-brain-x2iu.onrender.com/mcp`
+- API hostname：`second-brain-x2iu.onrender.com`
+- Authorization URL：`https://second-brain-x2iu.onrender.com/oauth/authorize`
+- Token URL：`https://second-brain-x2iu.onrender.com/oauth/token`
+- Registration URL：`https://second-brain-x2iu.onrender.com/oauth/register`
+- Issuer：`https://second-brain-x2iu.onrender.com/`
+- Redirect URI：`https://agent.meta.ai/api/hatch/oauth/callback`（由 client 註冊並精確比對）
+- Scope：只記錄對話使用 `memory:write`；需要讀取時才加上 `memory:read`。
+- Client authentication：`none`；PKCE：`S256`。
+
+若要更新 token，DCR 必須註冊 `refresh_token` grant。
+這是向後相容的伺服器變更，不需資料庫 migration 或轉換既有 token。
+部署後從 Muse 重新開始授權，使用新 code；既有明確傳遞正確 resource 的 client 行為不變。
+OAuth 成功後，Muse 的 skill 仍須使用 MCP 協定呼叫 `/mcp`；
+本變更不會把管理 REST API 改成接受 OAuth token。

@@ -36,7 +36,8 @@ def token_app():
 
 
 @pytest.mark.anyio
-async def test_code_exchange_uses_pkce_and_returns_opaque_tokens(token_app):
+@pytest.mark.parametrize("include_resource", [True, False])
+async def test_code_exchange_uses_pkce_and_returns_opaque_tokens(token_app, include_resource):
     app, tokens = token_app
     form = {
         "grant_type": "authorization_code",
@@ -46,6 +47,8 @@ async def test_code_exchange_uses_pkce_and_returns_opaque_tokens(token_app):
         "resource": "https://memory.test/mcp",
         "code_verifier": VERIFIER,
     }
+    if not include_resource:
+        form.pop("resource")
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="https://memory.test"
     ) as client:
@@ -58,6 +61,7 @@ async def test_code_exchange_uses_pkce_and_returns_opaque_tokens(token_app):
     assert response.headers["cache-control"] == "no-store"
     assert response.headers["pragma"] == "no-cache"
     kwargs = tokens.exchange_authorization_code.call_args.kwargs
+    assert kwargs["resource"] == "https://memory.test/mcp"
     assert kwargs["code_hash"] == hash_token(form["code"])
     assert kwargs["code_challenge"] == pkce_s256(VERIFIER)
     assert kwargs["access_token_hash"] == hash_token(payload["access_token"])
@@ -126,7 +130,8 @@ async def test_code_exchange_uses_canonical_root_resource_url():
 
 
 @pytest.mark.anyio
-async def test_refresh_rotates_token_and_can_downscope(token_app):
+@pytest.mark.parametrize("include_resource", [True, False])
+async def test_refresh_rotates_token_and_can_downscope(token_app, include_resource):
     app, tokens = token_app
     form = {
         "grant_type": "refresh_token",
@@ -135,6 +140,8 @@ async def test_refresh_rotates_token_and_can_downscope(token_app):
         "resource": "https://memory.test/mcp",
         "scope": "memory:read",
     }
+    if not include_resource:
+        form.pop("resource")
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="https://memory.test"
     ) as client:
@@ -142,6 +149,7 @@ async def test_refresh_rotates_token_and_can_downscope(token_app):
     assert response.status_code == 200
     payload = response.json()
     kwargs = tokens.rotate_refresh_token.call_args.kwargs
+    assert kwargs["resource"] == "https://memory.test/mcp"
     assert kwargs["refresh_token_hash"] == hash_token(form["refresh_token"])
     assert kwargs["next_refresh_token_hash"] == hash_token(payload["refresh_token"])
     assert kwargs["scopes"] == ["memory:read"]
@@ -231,3 +239,28 @@ async def test_invalid_grant_replay_and_database_failure(token_app):
         response = await client.post("/oauth/token", data=form)
     assert response.status_code == 503
     assert response.json() == {"error": "temporarily_unavailable"}
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("grant_type", ["authorization_code", "refresh_token"])
+@pytest.mark.parametrize("resource", ["", "https://other.test/mcp", "https://memory.test/"])
+async def test_explicit_invalid_resource_never_uses_default(token_app, grant_type, resource):
+    app, tokens = token_app
+    form = {
+        "grant_type": grant_type,
+        "client_id": "client",
+        "resource": resource,
+    }
+    if grant_type == "authorization_code":
+        form.update(code="authorization-code-secret", code_verifier=VERIFIER,
+                    redirect_uri="https://chatgpt.com/callback")
+    else:
+        form["refresh_token"] = "refresh-token-secret-value"
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="https://memory.test"
+    ) as client:
+        response = await client.post("/oauth/token", data=form)
+    assert response.status_code == 400
+    assert response.json()["error"] == ("invalid_request" if not resource else "invalid_grant")
+    tokens.exchange_authorization_code.assert_not_awaited()
+    tokens.rotate_refresh_token.assert_not_awaited()

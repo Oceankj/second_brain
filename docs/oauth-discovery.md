@@ -2,6 +2,8 @@
 
 Phase 4 已提供 discovery 與 Dynamic Client Registration（DCR）。ChatGPT 可以查詢授權設定並註冊 client；[登入與授權頁](oauth-login.md) 及 [Token 兌換與更新](oauth-token.md) 也已完成。
 
+若要查看本次 ChatGPT 串接實際遇到的錯誤、診斷證據與完整修正順序，請參考 [ChatGPT OAuth 與 MCP 串接障礙排查紀錄](chatgpt-connection-troubleshooting.md)。
+
 ## 連線順序
 
 ```mermaid

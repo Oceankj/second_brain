@@ -70,10 +70,16 @@ def app(repository):
 
 
 @pytest.mark.anyio
-async def test_approve_keeps_browser_session_and_binds_code(app, repository):
+@pytest.mark.parametrize("include_resource", [True, False])
+async def test_approve_keeps_browser_session_and_binds_code(app, repository, include_resource):
+    authorization_params = dict(PARAMS)
+    if not include_resource:
+        authorization_params.pop("resource")
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                  base_url='https://memory.test') as browser:
-        page = await browser.get('/oauth/authorize', params=PARAMS)
+        page = await browser.get('/oauth/authorize', params=authorization_params)
+        pending = repository.oauth_authorizations.create.call_args.args[0]
+        assert pending['resource'] == 'https://memory.test/mcp'
         assert page.status_code == 200
         assert '<script>bad()' not in page.text
         assert '&lt;script&gt;' in page.text
@@ -126,6 +132,7 @@ async def test_multiple_pages_share_one_session_and_remain_independent(app):
     {'redirect_uri': 'https://evil.test'}, {'client_id': 'unknown'},
     {'response_type': 'token'}, {'code_challenge_method': 'plain'},
     {'code_challenge': 'short'}, {'resource': 'https://other.test'}, {'scope': 'admin'},
+    {'resource': ''}, {'resource': 'https://memory.test/'},
 ])
 async def test_invalid_authorization_requests(app, repository, change):
     if change.get('client_id') == 'unknown':

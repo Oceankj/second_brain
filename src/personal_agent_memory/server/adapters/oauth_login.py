@@ -168,7 +168,9 @@ class LoginHandler:
             error = 'unsupported_response_type'
         elif 'authorization_code' not in client['grant_types']:
             error = 'unauthorized_client'
-        elif params.get('resource') != self.resource:
+        # This server has one resource. Generic OAuth clients may omit RFC 8707.
+        # An explicitly supplied empty or different resource remains invalid.
+        elif params.get('resource', self.resource) != self.resource:
             error = 'invalid_target'
         elif (params.get('code_challenge_method') != 'S256'
               or not re.fullmatch(r'[A-Za-z0-9_-]{43}', params.get('code_challenge', ''))):
