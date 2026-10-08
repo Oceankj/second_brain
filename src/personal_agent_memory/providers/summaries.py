@@ -6,6 +6,8 @@ import urllib.error
 import urllib.request
 from typing import Protocol
 
+from personal_agent_memory.providers.usage import observe_usage, track_usage
+
 
 class SummaryProvider(Protocol):
     async def summarize(self, *, system_prompt: str, user_prompt: str) -> str:
@@ -54,6 +56,7 @@ class CloudflareSummaryProvider:
             user_prompt=user_prompt,
         )
 
+    @track_usage(provider="cloudflare", operation="summary")
     def _summarize_sync(self, *, system_prompt: str, user_prompt: str) -> str:
         payload: dict[str, object] = {
             "messages": [
@@ -77,6 +80,7 @@ class CloudflareSummaryProvider:
         try:
             with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
                 body = json.loads(response.read().decode("utf-8"))
+                observe_usage(body)
         except urllib.error.HTTPError as exc:
             error_body = exc.read().decode("utf-8", errors="replace")
             raise RuntimeError(

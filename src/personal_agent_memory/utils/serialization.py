@@ -13,6 +13,19 @@ def serialize_item(
         "user_id": item.get("user_id", "0"),
         "type": item["type"],
         "ingest_reason": item.get("ingest_reason"),
+        **{
+            key: item.get(key)
+            for key in (
+                "record_kind",
+                "role",
+                "source",
+                "session_id",
+                "source_message_id",
+                "sequence",
+            )
+        },
+        "source_timestamp": json_datetime(item.get("source_timestamp")),
+        "content_kinds": item.get("content_kinds") or [],
         "title": item["title"],
         "body": item["body"],
         "status": item["status"],
@@ -73,7 +86,8 @@ def build_compact_context(items: list[dict[str, Any]]) -> str:
         return ""
     blocks = []
     for item in items:
-        blocks.append(f"[{item['type']}] {item['title']}\n{item['body']}")
+        role = f" role={item['role']}" if item.get("role") else ""
+        blocks.append(f"[{item['type']}{role}] {item['title']}\n{item['body']}")
     return "\n\n---\n\n".join(blocks)
 
 

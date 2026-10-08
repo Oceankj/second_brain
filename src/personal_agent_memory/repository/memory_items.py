@@ -20,18 +20,47 @@ class MemoryItemsRepository:
         status: str = "candidate",
         event_date: str | None = None,
         ingest_reason: str | None = None,
+        record_kind: str = "unknown",
+        role: str | None = None,
+        source: str | None = None,
+        session_id: str | None = None,
+        source_message_id: str | None = None,
+        sequence: int | None = None,
+        source_timestamp: datetime | None = None,
+        content_kinds: list[str] | None = None,
+        ingest_fingerprint: str | None = None,
     ) -> dict[str, Any]:
         async with self._connect() as conn:
             row = await conn.execute(
                 """
                 insert into memory_items (
-                  user_id, type, ingest_reason, title, body, status, event_date
+                  user_id, type, ingest_reason, title, body, status, event_date,
+                  record_kind, role, source, session_id, source_message_id, sequence,
+                  source_timestamp, content_kinds, ingest_fingerprint
                 )
-                values (%s, %s, %s, %s, %s, %s, %s)
+                values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 returning id::text, user_id, type::text, ingest_reason, title, body, status::text,
-                          event_date, created_at, updated_at
+                          event_date, created_at, updated_at, record_kind, role, source, session_id,
+                          source_message_id, sequence, source_timestamp, content_kinds
                 """,
-                (user_id, item_type, ingest_reason, title, body, status, event_date),
+                (
+                    user_id,
+                    item_type,
+                    ingest_reason,
+                    title,
+                    body,
+                    status,
+                    event_date,
+                    record_kind,
+                    role,
+                    source,
+                    session_id,
+                    source_message_id,
+                    sequence,
+                    source_timestamp,
+                    content_kinds or [],
+                    ingest_fingerprint,
+                ),
             )
             return dict(await row.fetchone())
 
@@ -40,7 +69,8 @@ class MemoryItemsRepository:
             cursor = await conn.execute(
                 """
                 select id::text, user_id, type::text, ingest_reason, title, body, status::text,
-                       event_date, created_at, updated_at
+                       event_date, created_at, updated_at, record_kind, role, source, session_id,
+                          source_message_id, sequence, source_timestamp, content_kinds
                 from memory_items
                 where lower(title) = lower(%s)
                   and user_id = %s
@@ -58,7 +88,8 @@ class MemoryItemsRepository:
             cursor = await conn.execute(
                 """
                 select id::text, user_id, type::text, ingest_reason, title, body, status::text,
-                       event_date, created_at, updated_at
+                       event_date, created_at, updated_at, record_kind, role, source, session_id,
+                          source_message_id, sequence, source_timestamp, content_kinds
                 from memory_items
                 where user_id = %s
                   and type = 'diary'
@@ -85,7 +116,8 @@ class MemoryItemsRepository:
             cursor = await conn.execute(
                 """
                 select id::text, user_id, type::text, ingest_reason, title, body, status::text,
-                       event_date, created_at, updated_at
+                       event_date, created_at, updated_at, record_kind, role, source, session_id,
+                          source_message_id, sequence, source_timestamp, content_kinds
                 from memory_items
                 where created_at >= %s
                   and created_at < %s
@@ -118,7 +150,8 @@ class MemoryItemsRepository:
             cursor = await conn.execute(
                 """
                 select id::text, user_id, type::text, ingest_reason, title, body, status::text,
-                       event_date, created_at, updated_at
+                       event_date, created_at, updated_at, record_kind, role, source, session_id,
+                          source_message_id, sequence, source_timestamp, content_kinds
                 from memory_items
                 where created_at >= %s
                   and created_at < %s
@@ -146,3 +179,15 @@ class MemoryItemsRepository:
                 (item_ids,),
             )
             return result.rowcount or 0
+
+    async def find_source(
+        self, *, user_id: str, source: str, session_id: str, message_id: str
+    ) -> dict[str, Any] | None:
+        async with self._connect() as conn:
+            cursor = await conn.execute(
+                """select *, id::text as id from memory_items where user_id = %s
+                and source = %s and session_id = %s and source_message_id = %s""",
+                (user_id, source, session_id, message_id),
+            )
+            row = await cursor.fetchone()
+            return dict(row) if row else None

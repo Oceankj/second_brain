@@ -8,6 +8,8 @@ Prompts 適合在 workflow 穩定後加入，用來讓 client 或使用者明確
 
 ### review_candidate_notes
 
+對應的 REST 功能已提供 `/maintenance/review-candidates`（`dry_run`、`limit`），處理全部待整理 candidates；此 MCP prompt 本身尚未註冊。
+
 協助使用者檢視尚未整理的 candidate notes，決定要合併、拆分、保留或 archive。
 
 Possible arguments:

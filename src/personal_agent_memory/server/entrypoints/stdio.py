@@ -4,6 +4,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from personal_agent_memory.contracts.memory import IngestMessagesInput
 from personal_agent_memory.server.dependencies import get_application_context
 from personal_agent_memory.server.tools.memory import (
     get_context_with_token,
@@ -33,6 +34,23 @@ async def ingest_turn(
         assistant_output=assistant_output,
         metadata=metadata,
     )
+
+
+@mcp.tool()
+async def ingest_messages(
+    token: str,
+    source: str,
+    session_id: str,
+    messages: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Store role-separated source messages with stable IDs and optional reply relationships."""
+    payload = IngestMessagesInput(
+        token=token,
+        source=source,
+        session_id=session_id,
+        messages=messages,
+    )
+    return await get_application_context().memory_service().ingest_messages(payload)
 
 
 @mcp.tool()

@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from typing import TYPE_CHECKING
 
 import psycopg
 from psycopg.rows import dict_row
 
+from personal_agent_memory.repository.consolidation import ConsolidationRepository
 from personal_agent_memory.repository.memory_chunks import MemoryChunksRepository
 from personal_agent_memory.repository.memory_item_events import MemoryItemEventsRepository
 from personal_agent_memory.repository.memory_item_tags import MemoryItemTagsRepository
@@ -26,7 +28,11 @@ class PostgresMemoryRepository:
     def __init__(self, database_url: str) -> None:
         self.database_url = database_url
         self._pool: AsyncConnectionPool | None = None
+        self._transaction_connection: ContextVar[psycopg.AsyncConnection | None] = ContextVar(
+            "memory_transaction_connection", default=None
+        )
         self.memory_items = MemoryItemsRepository(self._connect)
+        self.consolidation = ConsolidationRepository(self._connect)
         self.memory_chunks = MemoryChunksRepository(self._connect)
         self.memory_links = MemoryLinksRepository(self._connect)
         self.tags = TagsRepository(self._connect)
@@ -73,7 +79,20 @@ class PostgresMemoryRepository:
         self._pool = None
 
     @asynccontextmanager
+    async def transaction(self) -> AsyncIterator[psycopg.AsyncConnection]:
+        """Bind repository operations in this task to one atomic transaction."""
+        async with self._connect() as conn, conn.transaction():
+            token = self._transaction_connection.set(conn)
+            try:
+                yield conn
+            finally:
+                self._transaction_connection.reset(token)
+
+    @asynccontextmanager
     async def _connect(self) -> AsyncIterator[psycopg.AsyncConnection]:
+        if (conn := self._transaction_connection.get()) is not None:
+            yield conn
+            return
         if self._pool is not None:
             async with self._pool.connection() as conn:
                 yield conn

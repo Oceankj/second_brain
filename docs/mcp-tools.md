@@ -115,8 +115,8 @@ Output schema:
 - 目前所有 accepted turns 都先建立 `note` candidate。`user_preference`、`stable_fact`、`personal_insight` 的後續用途由 daily maintenance tasks 根據 `ingest_reason` 判斷。
 - `personal_insight` 表示使用者對自身思考、工作方式、需求或狀態的自我觀察；P0 先作為帶時間脈絡的 `note` candidate。
 - P0 可以先產生 `candidate` memory item，不急著在主流程合併到既有 note。
-- Canonical profile 不由 `ingest_turn` 直接更新；profile update task 會讀取當天 `status=candidate` 且 `ingest_reason=user_preference` 的 items，採用後再把 raw candidates archived。
-- Daily diary 不依賴 enqueue queue；daily maintenance 直接讀取指定日期產生的 `memory_items` 與 `created` events，作為建立 diary entry 的素材。
+- Canonical profile 不由 `ingest_turn` 或 candidate review 直接更新；未來 profile task 需獨立追蹤來源是否已消費，因為 preference candidates 也會整理為 active notes。
+- Daily maintenance 透過 REST `/maintenance/review-candidates` 處理所有待整理 candidates，再按原始日期建立／更新 diary；不新增 MCP tool 或 queue。單日 `/maintenance/daily-diary` 仍可獨立使用。
 - 當 `ingest_turn` 因明確 `[[wikilink]]` 建立新的 `memory_links` 時，會在被連到的 target item 上寫入 `linked_from_new_note` event，作為 audit trail 與未來 ranking signal。
 
 ### Side Effects
@@ -149,3 +149,8 @@ Output schema:
   }
 }
 ```
+
+
+## Role-separated message ingestion
+
+See [message source schema and rollout](database/message-sources.md) for `ingest_messages`, reply links, multi-valued content kinds, and compatibility. No `turn_id` is required. Legacy `ingest_turn` remains available.

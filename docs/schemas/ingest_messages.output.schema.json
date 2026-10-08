@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:personal-agent-memory:schema:ingest_turn:output",
-  "title": "ingest_turn output",
+  "$id": "urn:personal-agent-memory:schema:ingest_messages:output",
+  "title": "ingest_messages output",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -21,24 +21,18 @@
         "$ref": "#/$defs/memory_item"
       }
     },
-    "tags": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/tag"
-      }
-    },
     "links": {
       "type": "array",
       "items": {
         "$ref": "#/$defs/memory_link"
       }
     },
-    "events": {
-      "type": "array",
-      "description": "memory_item_events created during ingestion.",
-      "items": {
-        "$ref": "#/$defs/memory_item_event"
-      }
+    "created_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "usage_run_id": {
+      "type": "string"
     }
   },
   "$defs": {

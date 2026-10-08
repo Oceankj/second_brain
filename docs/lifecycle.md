@@ -75,59 +75,55 @@ flowchart TD
   logWriteEvents --> done
 ```
 
-## Daily Notes Review Lifecycle
+## Candidate Review and Diary Lifecycle
 
 ```mermaid
 flowchart TD
-  trigger{"Daily notes review trigger"}
-  trigger --> collect["Load today's candidate memory_items where ingest_reason is stable_fact or personal_insight"]
-
-  collect --> updateNotes["Update notes"]
-  updateNotes --> findSimilar["Find similar notes by tags, links, embedding, title, body"]
-  findSimilar --> mergeOrSplit{"Merge or split needed?"}
-  mergeOrSplit -- "Merge" --> merge["Merge notes and preserve provenance"]
-  mergeOrSplit -- "Split" --> split["Split oversized notes into focused notes"]
-  mergeOrSplit -- "No" --> keep["Keep candidate shape"]
-
-  merge --> repairLinks["Repair and update two-way links"]
-  split --> repairLinks
-  keep --> repairLinks
-
-  repairLinks --> normalize["Normalize tags"]
-  normalize --> activate["Mark reviewed notes as active"]
-  activate --> archive["Archive stale or superseded items when appropriate"]
-  archive --> done["Daily notes review complete"]
+  trigger["Daily / manual maintenance"] --> collect["Load oldest pending candidate notes across all dates"]
+  collect --> related["Find related active notes for the same user"]
+  related --> plan["Generate and validate merge / split plan; cover every source"]
+  plan --> dates["Group original evidence by source date"]
+  dates --> diary["Preview diary for each date, including previously reviewed originals"]
+  diary --> preview{"dry_run?"}
+  preview -- Yes --> return["Return plan and diaries without DB writes"]
+  preview -- No --> embed["Prepare embeddings"]
+  embed --> lock["Lock user/date; recheck source and diary snapshots"]
+  lock --> save["Atomic: create active notes, copy tags, repair links, archive candidates, replace diaries"]
+  save --> more{"has_more?"}
+  more -- Yes --> collect
+  more -- No --> done["Maintenance complete"]
 ```
 
-## Daily Note Creation Lifecycle
+Original candidates remain available as archived provenance. New notes reference their
+sources and related active notes; incoming and outgoing edges carry forward. Existing
+active notes are not automatically rewritten. The batch can merge candidates or split
+one candidate into multiple notes. Tags are inherited and deduplicated by ID; alias
+normalization is future work.
 
-```mermaid
-flowchart TD
-  trigger{"Daily note trigger"}
-  trigger --> collect["Load today's memory_items and created events"]
-  collect --> diary["Create daily note / diary entry"]
-  diary --> diaryLinks["Link diary to important memory_items"]
-  diaryLinks --> diaryEvents["Insert mentioned_in_diary events"]
-  diaryEvents --> done["Daily note creation complete"]
-```
+Source date uses `event_date`, then ingest event `metadata.timestamp` in the configured
+timezone, then original `created_at`. Cross-date merged notes preserve all source dates
+in their created event. Diary text is generated only from that day's original evidence.
+Review output never becomes a new event on its processing date. A later candidate for
+an existing date rebuilds that diary with prior reviewed evidence and archives the old
+version. Any failed write rolls back the entire batch; conflicts can be retried.
+
+`POST /maintenance/daily-diary` remains a separate single-date summary utility. It
+includes pending originals as well as originals archived by candidate review, excludes
+review-generated notes, and does not change candidate status.
 
 ## Profile Update Lifecycle
 
-```mermaid
-flowchart TD
-  trigger{"Profile update trigger"}
-  trigger --> collect["Load today's candidate memory_items where ingest_reason is user_preference"]
-  collect --> updateProfile["Update canonical profile system-observed section"]
-  updateProfile --> archive["Archive consumed user_preference candidates"]
-  archive --> done["Profile update complete"]
-```
+Canonical profile updates are not implemented. Preferences participate in candidate
+review as durable notes. A future profile updater must track its own processed state
+and read provenance; it must not rely on preferences remaining in candidate status.
 
 ## Memory Item Status
 
 ```mermaid
 stateDiagram-v2
   [*] --> candidate: ingest_turn creates item
-  candidate --> active: review or daily consolidation
+  candidate --> archived: consolidated; preserved as source
+  [*] --> active: review creates replacement note
   candidate --> archived: stale, duplicate, or superseded
   active --> archived: superseded by merge or no longer useful
   archived --> active: manual restore
@@ -176,3 +172,17 @@ sequenceDiagram
   MCP->>DB: insert memory_item_events
   MCP-->>Caller: accepted ingestion summary
 ```
+
+### Evidence-preserving diary rendering
+
+Diary creation now calls the shared `prepare_diary` pipeline per original source.
+The model proposes multi-valued categories and keep/omit decisions; the application
+checks complete block-ID coverage and retains all substantive source sections.
+Only deterministic bookkeeping exclusions are applied. Structural failures fall back
+to verbatim evidence rather than a second generated summary. Preview `preparation`
+replaces `summary_prompt`; saved events retain hashes and offsets. See
+[extractive preparation](database/message-sources.md#extractive-diary-preparation-extractive-v1).
+
+Operational reports now use selective-summary-v2: a short local summary followed by
+a model scope check, with original-excerpt fallback. Personal material remains verbatim.
+See [selective work summaries](database/message-sources.md#selective-work-summaries-selective-summary-v2).

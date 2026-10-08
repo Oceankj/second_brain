@@ -1,7 +1,10 @@
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from contextlib import asynccontextmanager
+from datetime import UTC, date, datetime, timedelta
+from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -56,6 +59,8 @@ class FakeMemoryItemsRepository:
         status: str = "candidate",
         event_date: str | None = None,
         ingest_reason: str | None = None,
+        record_kind: str = "unknown",
+        content_kinds: list[str] | None = None,
     ) -> dict[str, Any]:
         item = {
             "id": "diary-1",
@@ -153,9 +158,19 @@ class FakeMemoryItemEventsRepository:
 class FakeRepository:
     def __init__(self, source_items: list[dict[str, Any]]) -> None:
         self.memory_items = FakeMemoryItemsRepository(source_items)
+        self.consolidation = SimpleNamespace(
+            diary_sources=AsyncMock(return_value=source_items),
+            replacements=AsyncMock(return_value=[]),
+            lock_items=AsyncMock(return_value=source_items),
+        )
         self.memory_chunks = FakeMemoryChunksRepository()
         self.memory_links = FakeMemoryLinksRepository()
         self.memory_item_events = FakeMemoryItemEventsRepository()
+        self.connection = type("Connection", (), {"execute": AsyncMock()})()
+
+    @asynccontextmanager
+    async def transaction(self):
+        yield self.connection
 
 
 def make_source_item(item_id: str, reason: str) -> dict[str, Any]:
@@ -210,8 +225,9 @@ async def test_create_daily_diary_dry_run_summarizes_without_writing() -> None:
 
     assert result["status"] == "preview"
     assert result["created"] is False
-    assert result["diary"]["body"] == "今天完成了 memory server 的 daily diary 設計與實作。"
-    assert "task_completed" in summary_provider.calls[0]["user_prompt"]
+    assert "User and assistant discussed daily diary generation." in result["diary"]["body"]
+    assert result["preparation"]["sources"][0]["validation"] == "fallback_invalid_plan"
+    assert "item-1" in summary_provider.calls[0]["user_prompt"]
     assert repository.memory_items.created == []
     assert repository.memory_chunks.created == []
     assert repository.memory_links.created == []
@@ -247,14 +263,14 @@ async def test_create_daily_diary_writes_diary_chunks_links_and_events() -> None
             "id": "link-1",
             "source_id": "diary-1",
             "target_id": "item-1",
-            "link_type": "references",
+            "link_type": "derived_from",
             "created_at": datetime(2026, 9, 8, 23, 1, tzinfo=UTC),
         },
         {
             "id": "link-2",
             "source_id": "diary-1",
             "target_id": "item-2",
-            "link_type": "references",
+            "link_type": "derived_from",
             "created_at": datetime(2026, 9, 8, 23, 1, tzinfo=UTC),
         },
     ]
@@ -263,3 +279,128 @@ async def test_create_daily_diary_writes_diary_chunks_links_and_events() -> None
         "mentioned_in_diary",
         "mentioned_in_diary",
     ]
+
+
+@pytest.mark.parametrize("day,hours", [(date(2026, 3, 8), 23), (date(2026, 11, 1), 25)])
+def test_day_bounds_follow_dst(day, hours):
+    start, end = utc_day_bounds(day, timezone="America/Los_Angeles")
+    assert end - start == timedelta(hours=hours)
+
+
+@pytest.mark.anyio
+async def test_existing_diary_skips_providers():
+    repository = FakeRepository([])
+    repository.memory_items.existing_diary = make_source_item("existing", "decision")
+    summary = FakeSummaryProvider()
+    result = await make_service(repository, FakeEmbeddingProvider(), summary).create_daily_diary(
+        CreateDailyDiaryInput(token="token", date=date(2026, 9, 8)),
+        user_id="user-local",
+    )
+    assert result["reason"] == "already_exists"
+    assert summary.calls == []
+
+
+@pytest.mark.anyio
+async def test_empty_day_skips_summary_and_writes():
+    repository = FakeRepository([])
+    summary = FakeSummaryProvider()
+    result = await make_service(repository, FakeEmbeddingProvider(), summary).create_daily_diary(
+        CreateDailyDiaryInput(token="token"),
+        user_id="user-local",
+    )
+    assert result["reason"] == "no_source_items"
+    assert summary.calls == []
+    assert repository.memory_items.created == []
+
+
+@pytest.mark.anyio
+async def test_default_date_is_previous_local_day(monkeypatch):
+    import personal_agent_memory.services.memory.daily_diary as module
+
+    class FixedDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 10, 2, 1, tzinfo=UTC).astimezone(tz)
+
+    monkeypatch.setattr(module, "datetime", FixedDatetime)
+    repository = FakeRepository([make_source_item("source", "decision")])
+    service = make_service(repository, FakeEmbeddingProvider(), FakeSummaryProvider())
+    service.timezone = "America/Los_Angeles"
+    result = await service.create_daily_diary(
+        CreateDailyDiaryInput(token="token", dry_run=True),
+        user_id="user-local",
+    )
+    assert result["diary"]["event_date"] == "2026-09-30"
+
+
+@pytest.mark.anyio
+async def test_embedding_failure_preserves_existing_diary():
+    repository = FakeRepository([make_source_item("source", "decision")])
+    repository.memory_items.existing_diary = make_source_item("existing", "decision")
+    embedding = FakeEmbeddingProvider()
+    embedding.embed_text = AsyncMock(side_effect=RuntimeError("provider unavailable"))
+    with pytest.raises(RuntimeError, match="provider unavailable"):
+        await make_service(repository, embedding, FakeSummaryProvider()).create_daily_diary(
+            CreateDailyDiaryInput(token="token", date=date(2026, 9, 8), force=True),
+            user_id="user-local",
+        )
+    assert repository.memory_items.archived == []
+    assert repository.memory_items.created == []
+
+
+@pytest.mark.anyio
+async def test_concurrent_writer_is_rechecked_before_insert():
+    repository = FakeRepository([make_source_item("source", "decision")])
+    repository.memory_items.find_diary_by_date = AsyncMock(
+        side_effect=[None, make_source_item("winner", "decision")]
+    )
+    result = await make_service(
+        repository,
+        FakeEmbeddingProvider(),
+        FakeSummaryProvider(),
+    ).create_daily_diary(
+        CreateDailyDiaryInput(token="token", date=date(2026, 9, 8)),
+        user_id="user-local",
+    )
+    assert result["reason"] == "already_exists"
+    assert result["diary"]["id"] == "winner"
+    assert repository.memory_items.created == []
+
+
+def test_diary_evidence_removes_only_storage_receipts():
+    from personal_agent_memory.services.memory.daily_diary import diary_evidence_body
+
+    body = (
+        "User:\n喜歡這個 framework。\n\nAssistant:\n"
+        "已寫入：個人 MEMORY.md（Preferences）＋ second-brain MCP。"
+    )
+    assert diary_evidence_body(body) == "User:\n喜歡這個 framework。"
+    engineering = "User:\n修正記憶系統\n\nAssistant:\n已寫入資料庫，但回滾功能測試失敗。"
+    assert diary_evidence_body(engineering) == engineering
+    substantive = "User:\n偏好\n\nAssistant:\n已記住：偏好低風險的策略。"
+    assert diary_evidence_body(substantive) == substantive
+    assert body.endswith("second-brain MCP。")  # The original evidence remains unchanged.
+
+
+def test_diary_evidence_omits_save_request_without_removing_thought():
+    from personal_agent_memory.services.memory.daily_diary import diary_evidence_body
+
+    original = "User:\nConnection 是推定，不能當成引文。幫我寫到 memory system。"
+    assert diary_evidence_body(original) == "User:\nConnection 是推定，不能當成引文。"
+    actual_work = "User:\n開發 memory system 寫入功能，並測試資料是否保留。"
+    assert diary_evidence_body(actual_work) == actual_work
+
+
+@pytest.mark.anyio
+async def test_changed_evidence_aborts_before_writing_diary():
+    from personal_agent_memory.services.memory.diary_preparation import DiarySourceConflict
+
+    item = make_source_item("source", "decision")
+    repo = FakeRepository([item])
+    repo.consolidation.lock_items.return_value = [{**item, "body": "Changed after classification"}]
+    with pytest.raises(DiarySourceConflict):
+        await make_service(repo, FakeEmbeddingProvider(), FakeSummaryProvider()).create_daily_diary(
+            CreateDailyDiaryInput(token="token", date=date(2026, 9, 8)),
+            user_id="user-local",
+        )
+    assert repo.memory_items.created == [] and repo.memory_items.archived == []

@@ -26,11 +26,11 @@ P1 是 P0 跑通之後要優先處理的項目。它們會直接改善 retrieval
 ### Memory 維護
 
 - 在 daily tasks 中整理與 normalize tags。
-- 合併高度相似的 candidate notes。
-- 拆分超過長度或複雜度上限的 notes。
-- note merge / split 後修復 links。
-- 根據當天 interactions 產生 daily diary。
-- consolidation 後將 candidate notes 標記為 `active`。
+- 已實作：同批 candidates 的模型整理、合併與拆分；跨批與既有 active notes 的合併仍待實作。
+- 超過 summary 來源預算的單筆 note 尚需人工調整預算；不會靜默截斷或消耗。
+- 已實作：保留原始 notes/links，將 incoming/outgoing links 接到整理結果。
+- 已實作：所有 pending candidates 分批整理，再依來源日期更新 diary；支援 REST 預覽/讀取與 GitHub workflow，部署及 secrets 設定後才啟用。
+- 已實作：建立 active 整理結果，原始 candidate 封存並保留 provenance、tags 和來源連結。
 - 封存過期或被取代的 notes。
 
 ### Ingestion Extraction

@@ -47,6 +47,19 @@ def rank_chunk_rows(
                 "user_id": row["user_id"],
                 "type": row["type"],
                 "ingest_reason": row["ingest_reason"],
+                **{
+                    key: row.get(key)
+                    for key in (
+                        "record_kind",
+                        "role",
+                        "source",
+                        "session_id",
+                        "source_message_id",
+                        "sequence",
+                        "source_timestamp",
+                        "content_kinds",
+                    )
+                },
                 "title": row["title"],
                 "body": row["body"],
                 "status": row["status"],
@@ -91,9 +104,7 @@ def collect_linked_source_scores(
         source_id = item["id"]
         source_score = float(item["score"] or 0)
         links = link_map.get(source_id, {})
-        linked_ids = [
-            link["target_id"] for link in links.get("outgoing_links", [])
-        ] + [
+        linked_ids = [link["target_id"] for link in links.get("outgoing_links", [])] + [
             link["source_id"] for link in links.get("backlinks", [])
         ]
         for linked_id in linked_ids:
@@ -117,9 +128,9 @@ def merge_seed_and_linked_items(
         return seed_items[:limit]
 
     seed_ids = {item["id"] for item in seed_items}
-    selected_linked = [
-        item for item in linked_items if item["id"] not in seed_ids
-    ][: min(linked_limit, limit)]
+    selected_linked = [item for item in linked_items if item["id"] not in seed_ids][
+        : min(linked_limit, limit)
+    ]
     if not selected_linked:
         return seed_items[:limit]
 
@@ -190,8 +201,6 @@ def build_retrieval_query(
     if not diary_blocks:
         return input_text
 
-    return (
-        f"{input_text.strip()}\n\n"
-        "Relevant recent diary context:\n"
-        + "\n\n---\n\n".join(diary_blocks)
+    return f"{input_text.strip()}\n\nRelevant recent diary context:\n" + "\n\n---\n\n".join(
+        diary_blocks
     )

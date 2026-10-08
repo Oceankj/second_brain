@@ -41,6 +41,7 @@ class MemoryChunksRepository:
         user_id: str,
         memory_types: list[str],
         limit: int,
+        statuses: list[str] | None = None,
     ) -> list[dict[str, Any]]:
         async with self._connect() as conn:
             cursor = await conn.execute(
@@ -56,6 +57,9 @@ class MemoryChunksRepository:
                   mi.event_date,
                   mi.created_at,
                   mi.updated_at,
+                  mi.record_kind, mi.role, mi.source, mi.session_id,
+                  mi.source_message_id, mi.sequence,
+                  mi.source_timestamp, mi.content_kinds,
                   mc.id::text as chunk_id,
                   mc.chunk_index,
                   mc.content as chunk_content,
@@ -64,6 +68,7 @@ class MemoryChunksRepository:
                 from memory_chunks mc
                 join memory_items mi on mi.id = mc.memory_item_id
                 where mi.status <> 'archived'
+                  and (%s::text[] is null or mi.status::text = any(%s))
                   and mi.user_id = %s
                   and mi.type::text = any(%s)
                 order by mc.embedding <=> %s::vector
@@ -71,6 +76,8 @@ class MemoryChunksRepository:
                 """,
                 (
                     to_pgvector(query_embedding),
+                    statuses,
+                    statuses,
                     user_id,
                     memory_types,
                     to_pgvector(query_embedding),
@@ -104,6 +111,9 @@ class MemoryChunksRepository:
                   mi.event_date,
                   mi.created_at,
                   mi.updated_at,
+                  mi.record_kind, mi.role, mi.source, mi.session_id,
+                  mi.source_message_id, mi.sequence,
+                  mi.source_timestamp, mi.content_kinds,
                   mc.id::text as chunk_id,
                   mc.chunk_index,
                   mc.content as chunk_content,
@@ -163,6 +173,9 @@ class MemoryChunksRepository:
                     mi.event_date,
                     mi.created_at,
                     mi.updated_at,
+                  mi.record_kind, mi.role, mi.source, mi.session_id,
+                  mi.source_message_id, mi.sequence,
+                  mi.source_timestamp, mi.content_kinds,
                     mc.id::text as chunk_id,
                     mc.chunk_index,
                     mc.content as chunk_content,
@@ -187,6 +200,9 @@ class MemoryChunksRepository:
                     mi.event_date,
                     mi.created_at,
                     mi.updated_at,
+                  mi.record_kind, mi.role, mi.source, mi.session_id,
+                  mi.source_message_id, mi.sequence,
+                  mi.source_timestamp, mi.content_kinds,
                     mc.id,
                     mc.chunk_index,
                     mc.content,
@@ -204,6 +220,8 @@ class MemoryChunksRepository:
                   event_date,
                   created_at,
                   updated_at,
+                  record_kind, role, source, session_id, source_message_id, sequence,
+                  source_timestamp, content_kinds,
                   chunk_id,
                   chunk_index,
                   chunk_content,
@@ -262,6 +280,9 @@ class MemoryChunksRepository:
                   mi.event_date,
                   mi.created_at,
                   mi.updated_at,
+                  mi.record_kind, mi.role, mi.source, mi.session_id,
+                  mi.source_message_id, mi.sequence,
+                  mi.source_timestamp, mi.content_kinds,
                   mc.id::text as chunk_id,
                   mc.chunk_index,
                   mc.content as chunk_content,

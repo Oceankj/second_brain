@@ -174,7 +174,45 @@ curl -X POST http://127.0.0.1:8001/maintenance/daily-diary \
   -d '{"date":"2026-09-08","dry_run":false}'
 ```
 
-這個 endpoint 會用 `daily_diary.timezone` 將指定日期換算成查詢範圍，讀該日期的 non-archived, non-diary memory items，呼叫 `memory.json` 的 `summary.provider` 產生 diary body，建立 `type=diary` 的 active memory item，再替 diary 建 chunks / embeddings / references links / `mentioned_in_diary` events。`dry_run=true` 會呼叫 summary provider 產生預覽，但不寫入 DB。若當天已經有未 archived diary，預設回傳 `already_exists`；`force=true` 會 archive 舊 diary 並重建。
+日常維護使用 `POST /maintenance/review-candidates`：依原始日期由舊到新，分批整理**所有尚未處理的 `status=candidate` notes**，不限昨天、不限 ingest reason。每次 `limit` 預設 10、範圍 1–50；回傳 `has_more=true` 時可繼續下一批。
+
+流程：
+
+1. 讀取完整 candidates（不截斷素材），用 embedding 找出同一使用者的相關 active notes 作為參考。
+2. Summary provider 回傳結構化整理計畫：同批 candidates 可合併、單筆可拆分；一筆直接保留為一筆時，程式強制沿用原始 title/body，避免不必要的生成式改寫；所有 candidates 必須有對應輸出，來源與相關筆記 ID 必須通過驗證。
+3. 建立新的 active notes，沿用來源 tags、保留指向原始 notes 的 references、記錄 provenance，並把原有 incoming/outgoing links 接到整理結果。既有 active notes 只作為參考與連結目標，不會被模型覆寫或封存；跨批合併既有 active notes 與 tag alias 合併尚未實作。
+4. 原始 candidates 保留正文、chunks 與原連結，標記 archived；其 archived event 記錄 replacement IDs。`user_preference` 同樣整理成可檢索的 note，本流程不更新 canonical profile。
+5. 依來源日期建立／更新 diaries。優先使用 `event_date`，其次使用 ingest `metadata.timestamp` 換算 `daily_diary.timezone`，最後才用原始 `created_at`。跨日合併 note 的 event_date 為最早來源日期，created event 保留全部 source dates；diary 只摘要各自日期的原始素材。
+6. 晚到的 candidates 會連同之前已整理的原始素材重建該日 diary，舊 diary 封存。其他尚未處理的 candidates 留待後續批次，產出的 active notes 不會被當成今天的新事件再次摘要。
+
+摘要及 embeddings 完成後，整批 notes、tags、links、events、candidate 封存與 diaries 以同一 transaction 寫入；寫入前再次核對來源狀態與 diary 版本。衝突回傳 409，可重跑；模型輸出不合法、漏掉素材或超過來源預算回傳 422，資料保持不變；provider 失敗回傳 502。較小的 `limit` 有助於避免模型輸出超過 token 預算。單筆素材或當日累積素材過大時須調高 `summary.source_max_chars`，不會偷偷略過資料。
+
+```bash
+# 預覽最早的 3 筆待整理 candidates 與各日期 diary，不寫入 DB
+curl --fail-with-body -X POST http://127.0.0.1:8001/maintenance/review-candidates \
+  -H "Authorization: Bearer $MEMORY_DEFAULT_USER_TOKEN" \
+  -H "Content-Type: application/json" -d '{"dry_run":true,"limit":3}'
+
+# 正式整理一批（has_more=true 時繼續呼叫）
+curl --fail-with-body -X POST http://127.0.0.1:8001/maintenance/review-candidates \
+  -H "Authorization: Bearer $MEMORY_DEFAULT_USER_TOKEN" \
+  -H "Content-Type: application/json" -d '{"limit":5}'
+
+# 按日期讀取 diary 與 outgoing_links/backlinks
+curl --fail-with-body http://127.0.0.1:8001/diary/2026-10-01 \
+  -H "Authorization: Bearer $MEMORY_DEFAULT_USER_TOKEN"
+```
+
+保留的 `POST /maintenance/daily-diary` 是單日摘要工具，不會整理或消耗 candidates。省略 `date` 仍代表伺服器時區的昨天；`dry_run=true` 可預覽，`force=true` 可重建既有 diary。素材包含原日期的原始 notes，以及因整理而封存的 originals；排除整理產生的衍生 notes，避免重複摘要。讀取不存在的 diary 回傳 404，日期無效回傳 400。
+
+[Daily maintenance GitHub workflow](.github/workflows/daily-diary.yml) 每天 10:17 UTC 呼叫 candidate review（洛杉磯冬令 02:17／夏令 03:17）。每批 5 筆，單次最多 10 批；仍有 backlog 時 workflow 失敗提示重跑，下一次從剩餘 candidates 繼續。啟用方式：
+
+1. 部署新版 server，設定 `daily_diary.timezone`（例如 `America/Los_Angeles`）與 summary provider。
+2. 在 GitHub repository secrets 設定 `MEMORY_BASE_URL`（HTTPS origin）與 `MEMORY_DIARY_TOKEN`（目標使用者的 API token；不是 MCP OAuth access token）。
+3. 將 workflow 放到 default branch。先用手動 `workflow_dispatch`，保持 `dry_run=true`；正式執行時取消 dry run，或等每日排程。
+4. workflow 不再接受 `date`，因為 candidate backlog 自帶來源日期。手動單日摘要仍可呼叫 `/maintenance/daily-diary`。停用 GitHub Actions 中的 workflow 即可停止排程。
+
+CI log 只顯示批次狀態，不輸出日記與來源內容。preview 會使用 embedding 搜尋及 summary provider，但不改 DB。這份設定檔不代表線上排程已啟用；本流程也不代表系統保存了所有原始對話。
 
 Remote MCP HTTP 的 `memory.json` 設定範例：
 
@@ -358,11 +396,9 @@ MVP 允許的 `ingest_reason`：
 - `stable_artifact`
 - `manual_import`
 
-P0 使用 deterministic routing：`ingest_turn` 不推論 reason，而是信任 caller 提供的 `metadata.ingest_reason`。目前所有 accepted turns 都先建立 `note` candidate，並把 `ingest_reason` 寫在 `memory_items` 上。Daily maintenance 再依 reason 分工：
+`ingest_turn` 不推論 reason，而是信任 caller 提供的 `metadata.ingest_reason`。目前所有 accepted turns 都先建立 `note` candidate，並把 `ingest_reason` 寫在 `memory_items` 上。
 
-- 整理 notes：讀取當天 `status=candidate` 且 `ingest_reason in stable_fact / personal_insight` 的 items。
-- 生成 daily note：讀取當天所有 memory items。
-- 更新 profile：讀取當天 `status=candidate` 且 `ingest_reason=user_preference` 的 items，更新 canonical profile 的 system-observed 區，並把已採用的 candidates archived。
+Daily maintenance 現在讀取全部尚未處理的 candidates，整理成 active notes，保留原始資料並按來源日期產生 diary。先前只讀「當天 stable_fact / personal_insight」的設計已由此 backlog 流程取代。Canonical profile 更新仍待實作，未來應追蹤獨立的消費狀態，而不能再假設 preference 一直保持 candidate。
 
 `get_context` 會用 `max_context_chars` 對 `compact_context` 做 server-side hard budget，避免外層 agent 一次拿太多 memory 塞進 prompt。預設是 6000 chars。
 
@@ -382,3 +418,56 @@ Daily maintenance 會把候選 notes 和當天 interactions 整理成更穩定�
 - note 的長度上限要用 token、字數，還是 semantic sections 數量判斷？
 - profile_memory 什麼時候可以更新？需要幾次重複 evidence 才算穩定？
 - tag 合併是否需要人工確認，還是允許低風險自動合併？
+
+## 模型 token usage 紀錄
+
+每次 Cloudflare summary／embedding、Ollama embedding 呼叫，會寫入獨立 SQLite
+操作紀錄，預設為工作目錄下的 `logs/model-usage.sqlite3`，可用
+`MEMORY_USAGE_LOG_PATH` 指定路徑。容器部署應指定持久化掛載位置；預設容器檔案
+不保證在重新部署後保留。紀錄不會進入 memory DB、notes、diary 或 retrieval。
+
+- `usage_runs`：一次 ingestion、retrieval、candidate review 或 diary 執行的
+  `run_id`、用途、dry-run 狀態、起迄時間及成功／失敗結果。
+- `model_calls`：每次呼叫的 `call_id`、`run_id`、provider/model、用途、system prompt
+  SHA-256、generation settings、耗時、結果與 token 數。`usage_source=provider`
+  表示至少有 provider 回報值；各欄位仍可能為 NULL。總數由 input/output 相加時
+  `total_tokens_source=derived`，不代表 provider 另行回報了 total。
+- 缺少 usage、逾時或未完成的呼叫不會當成零。NULL 表示未知；程序中斷可能留下
+  `started` 呼叫或 `running` run，不能當成成功或零成本。
+- 不用 chunk 的字元數估計替代實際 token usage；不估算金額。
+- 模型成功但整理計畫驗證失敗時，call 仍保留已用 tokens，run 標示失敗。
+  dry run 及每次重試也各自記錄；memory transaction 回滾不會清除這份紀錄。
+- 不保存 API token、帳號憑證、prompt 正文、來源 notes、模型輸出或原始錯誤訊息。
+- 先建立呼叫紀錄才呼叫 provider；若紀錄位置無法寫入，停止該次呼叫。
+  回應後若紀錄更新失敗，原本的 started 紀錄仍可提示未確認用量。
+
+Maintenance API 成功回應新增 `usage_run_id`，可以查詢對應的用量：
+
+```sql
+SELECT r.run_id, r.operation, r.dry_run, r.status,
+       c.provider, c.model, c.operation, c.input_tokens, c.output_tokens,
+       c.total_tokens, c.usage_source, c.total_tokens_source, c.elapsed_ms
+FROM usage_runs r LEFT JOIN model_calls c ON c.run_id = r.run_id
+ORDER BY r.started_at, c.started_at;
+```
+
+目前 diary prompt 允許自然中英夾雜，不強迫翻譯術語；只保留有來源支持的內容，
+不補 insight。會先移除 Assistant 區段中明確的獨立儲存回條（例如「已寫入：
+個人 MEMORY.md（Preferences）＋ second-brain MCP。」），原始 note 不變。
+也會移除句末獨立的「幫我寫到 memory system」等指定儲存位置的要求，保留前面的內容。
+這是保守格式過濾，不代表能自動辨識所有敘述中的 bookkeeping；其他情況仍由
+prompt 要求排除。需要保留的主張也必須保留影響真假的不確定條件。
+
+
+## Role-separated message ingestion
+
+See [message source schema and rollout](docs/database/message-sources.md) for `ingest_messages`, reply links, multi-valued content kinds, and compatibility. No `turn_id` is required. Legacy `ingest_turn` remains available.
+
+
+手動執行可選 `batch_size`（1–5，預設 5）與 `max_batches`（1–10，預設 10）。
+`dry_run=true` 只預覽一批；每日排程則正式儲存。Actions summary 只顯示處理筆數與
+server usage run ID，不含 note／diary 正文；實際 token 數仍留在伺服器的 usage ledger。
+POST 逾時不自動重試，因為伺服器可能已完成寫入。30 分鐘後不再開始新批次，job 最長 45 分鐘。
+
+此 workflow 呼叫已部署伺服器，不會執行本機程式或自動部署。要使用最新的工作摘要與
+分角色來源，須先部署目前程式並執行 migrations 006／007，再把 workflow 放上 default branch。

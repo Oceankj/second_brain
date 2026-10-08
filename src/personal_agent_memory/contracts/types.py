@@ -4,7 +4,7 @@ from typing import Literal
 
 MemoryItemType = Literal["note", "diary", "profile_memory"]
 MemoryItemStatus = Literal["candidate", "active", "archived"]
-MemoryLinkType = Literal["references"]
+MemoryLinkType = Literal["references", "replies_to", "derived_from"]
 IngestReason = Literal[
     "task_completed",
     "explicit_memory_request",

@@ -6,6 +6,8 @@ import urllib.error
 import urllib.request
 from typing import Protocol
 
+from personal_agent_memory.providers.usage import observe_usage, track_usage
+
 
 class EmbeddingProvider(Protocol):
     async def embed_text(self, text: str) -> list[float]:
@@ -38,6 +40,7 @@ class OllamaEmbeddingProvider:
     async def embed_text(self, text: str) -> list[float]:
         return await asyncio.to_thread(self._embed_text_sync, text)
 
+    @track_usage(provider="ollama", operation="embedding")
     def _embed_text_sync(self, text: str) -> list[float]:
         payload: dict[str, object] = {
             "model": self.model,
@@ -56,6 +59,7 @@ class OllamaEmbeddingProvider:
         try:
             with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
                 body = json.loads(response.read().decode("utf-8"))
+                observe_usage(body)
         except urllib.error.HTTPError as exc:
             error_body = exc.read().decode("utf-8", errors="replace")
             raise RuntimeError(
@@ -121,6 +125,7 @@ class CloudflareEmbeddingProvider:
     async def embed_text(self, text: str) -> list[float]:
         return await asyncio.to_thread(self._embed_text_sync, text)
 
+    @track_usage(provider="cloudflare", operation="embedding")
     def _embed_text_sync(self, text: str) -> list[float]:
         payload: dict[str, object] = {"text": [text]}
         if self.pooling is not None:
@@ -139,6 +144,7 @@ class CloudflareEmbeddingProvider:
         try:
             with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
                 body = json.loads(response.read().decode("utf-8"))
+                observe_usage(body)
         except urllib.error.HTTPError as exc:
             error_body = exc.read().decode("utf-8", errors="replace")
             raise RuntimeError(

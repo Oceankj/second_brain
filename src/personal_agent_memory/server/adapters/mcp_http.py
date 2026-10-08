@@ -9,7 +9,11 @@ from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
 
 from personal_agent_memory.config import Settings
-from personal_agent_memory.contracts.memory import GetContextData, IngestTurnData
+from personal_agent_memory.contracts.memory import (
+    GetContextData,
+    IngestMessagesData,
+    IngestTurnData,
+)
 from personal_agent_memory.server.auth.transport import (
     MCP_HTTP_SCOPES,
     OAuthTokenVerifier,
@@ -91,6 +95,23 @@ def register_authenticated_tools(server: FastMCP, context: ApplicationContext) -
             metadata=metadata,
         )
         return await context.memory_service().ingest_turn_as_user(payload, user_id=user_id)
+
+    @server.tool(name="ingest_messages")
+    async def ingest_messages(
+        source: str,
+        session_id: str,
+        messages: list[dict[str, Any]],
+        ctx: Context,
+    ) -> dict[str, Any]:
+        """Store role-separated sources atomically; reply targets may have either role.
+
+        Each message requires source_message_id, role, body, timestamp and ingest_reason.
+        Optional sequence, reply_to_message_id, tags and multi-valued content_kinds.
+        Stable message IDs make identical retries idempotent; changed retries conflict.
+        """
+        user_id = authenticated_user_id(ctx, "memory:write")
+        payload = IngestMessagesData(source=source, session_id=session_id, messages=messages)
+        return await context.memory_service().ingest_messages_as_user(payload, user_id=user_id)
 
     @server.tool(name="get_context")
     async def get_context(

@@ -1,0 +1,132 @@
+name: Review candidates and create diaries
+
+on:
+  schedule:
+    # 02:17 PST / 03:17 PDT; review pending candidates from every date.
+    - cron: '17 10 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Generate a preview without saving'
+        default: true
+        type: boolean
+      batch_size:
+        description: 'Candidates per batch (1–5)'
+        default: '5'
+        type: choice
+        options: ['1', '2', '3', '4', '5']
+      max_batches:
+        description: 'Maximum batches (1–10; dry run always previews one batch)'
+        default: '10'
+        type: choice
+        options: ['1', '2', '3', '5', '10']
+
+permissions: {}
+
+concurrency:
+  group: daily-diary
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Review pending notes and create diaries
+        env:
+          MEMORY_BASE_URL: ${{ secrets.MEMORY_BASE_URL }}
+          MEMORY_DIARY_TOKEN: ${{ secrets.MEMORY_DIARY_TOKEN }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+          BATCH_SIZE: ${{ inputs.batch_size || '5' }}
+          MAX_BATCHES: ${{ inputs.max_batches || '10' }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import time
+          import uuid
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          base_url = os.environ['MEMORY_BASE_URL'].rstrip('/')
+          token = os.environ['MEMORY_DIARY_TOKEN']
+          parsed = urllib.parse.urlsplit(base_url)
+          if (parsed.scheme != 'https' or not parsed.hostname or not token
+                  or parsed.username or parsed.password or parsed.query or parsed.fragment):
+              raise SystemExit('Configure MEMORY_BASE_URL (HTTPS) and MEMORY_DIARY_TOKEN secrets')
+          dry_run = os.environ.get('DRY_RUN', 'true').lower()
+          if dry_run not in {'true', 'false'}:
+              raise SystemExit('Invalid DRY_RUN value')
+          try:
+              batch_size = int(os.environ.get('BATCH_SIZE', '5'))
+              max_batches = int(os.environ.get('MAX_BATCHES', '10'))
+          except ValueError:
+              raise SystemExit('Invalid batch configuration') from None
+          if not 1 <= batch_size <= 5 or not 1 <= max_batches <= 10:
+              raise SystemExit('Batch configuration is out of range')
+          payload = {'dry_run': dry_run == 'true', 'limit': batch_size}
+          started = time.monotonic()
+          summary_path = os.environ.get('GITHUB_STEP_SUMMARY')
+          def summary(text):
+              if summary_path:
+                  with open(summary_path, 'a', encoding='utf-8') as output:
+                      output.write(text + '\n')
+          summary('## Candidate review and diary generation')
+          summary('Mode: ' + ('dry run (no memory writes)' if payload['dry_run'] else 'save'))
+          summary('\n| Batch | Status | Notes | Diaries | Remaining | Usage run |')
+          summary('| --- | --- | --- | --- | --- | --- |')
+          request = urllib.request.Request(
+              base_url + '/maintenance/review-candidates',
+              data=json.dumps(payload).encode(),
+              headers={'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'},
+              method='POST',
+          )
+          # Do not forward credentials to a redirect target.
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, req, fp, code, msg, headers, newurl):
+                  return None
+          for batch in range(max_batches):
+              if time.monotonic() - started >= 1800:
+                  summary('\nStopped at the time budget; remaining candidates can run next time.')
+                  raise SystemExit('Time budget reached; rerun to continue')
+              try:
+                  with urllib.request.build_opener(NoRedirect).open(request, timeout=600) as response:
+                      result = json.load(response)
+              except urllib.error.HTTPError as exc:
+                  summary(f'\nRequest failed: HTTP {exc.code}. No automatic POST retry.')
+                  raise SystemExit(f'Review failed: HTTP {exc.code}') from None
+              except (urllib.error.URLError, TimeoutError):
+                  summary('\nConnection failed/timed out; server completion is unknown. '
+                          'No automatic POST retry.')
+                  raise SystemExit('Review failed: connection error or timeout') from None
+              except (ValueError, UnicodeError):
+                  raise SystemExit('Review returned invalid JSON') from None
+              if not isinstance(result, dict):
+                  raise SystemExit('Review returned an unexpected response')
+              status = result.get('status')
+              expected = {'preview', 'skipped'} if payload['dry_run'] else {'accepted', 'skipped'}
+              if status not in expected:
+                  raise SystemExit('Review returned an unexpected status')
+              notes, diaries = result.get('notes', []), result.get('diaries', [])
+              remaining = result.get('has_more', False)
+              if not isinstance(notes, list) or not isinstance(diaries, list) or type(remaining) is not bool:
+                  raise SystemExit('Review returned invalid result fields')
+              try:
+                  run_id = str(uuid.UUID(result['usage_run_id']))
+              except (KeyError, ValueError, TypeError, AttributeError):
+                  run_id = 'unavailable'
+              summary(f'| {batch + 1} | {status} | {len(notes)} | {len(diaries)} | '
+                      f'{remaining} | {run_id} |')
+              # Keep note bodies, diary text, and source evidence out of CI logs.
+              print('Batch', batch + 1, status, 'remaining:', bool(result.get('has_more')))
+              if payload['dry_run'] or not remaining:
+                  summary('\nToken counts are recorded in the server usage ledger; '
+                          'use the usage run ID to correlate calls.')
+                  break
+              if status != 'accepted' or not notes:
+                  raise SystemExit('Review made no progress; refusing to repeat the batch')
+          else:
+              summary('\nBatch limit reached; remaining candidates will continue on the next run.')
+              raise SystemExit('Batch limit reached; rerun to continue the remaining candidates')
+          PY

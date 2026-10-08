@@ -75,10 +75,7 @@ The main agent-facing entry point is MCP.
 There is also a small REST user API for user management, but it is not the
 primary interface for agent memory.
 
-Planned maintenance entry points include:
-
-- reviewing candidate notes;
-- creating daily diary entries;
+REST maintenance supports candidate review and diary creation. Remaining work includes:
 - updating profile-derived memory;
 - normalizing tags;
 - repairing and updating links;
@@ -165,11 +162,64 @@ Planned later work includes:
 
 - better extraction from interactions;
 - full-text search and reranking;
-- daily maintenance workers;
-- note merge and split flows;
+- merging reviewed notes across batches;
+- tag alias normalization;
 - profile stability rules;
 - richer link types;
 - heat and importance scoring;
 - stronger provenance support.
 
 See [TODO](docs/roadmap/TODO.md) for the longer backlog.
+
+### Candidate review and diaries
+
+`POST /maintenance/review-candidates` processes pending candidate notes from all
+dates, oldest first. It merges/splits candidates within a batch into new active
+notes, preserves source text and provenance, copies tags and graph edges, links
+related active notes, and archives the consumed candidates. Existing active
+notes are references and are not rewritten. Canonical profile updates and tag
+alias consolidation remain future work.
+
+Use `{"dry_run": true, "limit": 3}` to preview. The default limit is 10 (maximum
+50); continue while `has_more` is true. Diary entries use original source dates,
+including ingest timestamps, rather than the review date. Later batches refresh
+that day's diary using earlier reviewed source material as well. All database
+writes for a batch are atomic; failed validation leaves candidates pending.
+
+`GET /diary/YYYY-MM-DD` returns the authenticated user's diary and links, or 404.
+The existing `POST /maintenance/daily-diary` remains a standalone date-summary
+utility; it does not review candidates. Both maintenance endpoints support
+`dry_run` and use the existing user API token in the Bearer header.
+
+The [workflow](.github/workflows/daily-diary.yml) reviews candidates at 10:17 UTC,
+up to 10 batches of 5. Configure `MEMORY_BASE_URL` and `MEMORY_DIARY_TOKEN` GitHub
+repository secrets, deploy the new server, and add the workflow to the default
+branch to enable it. Manual runs default to preview and no longer accept a date.
+See the [Chinese setup guide](README.zh.md) for API behavior and limits.
+
+### Model usage ledger
+
+Provider calls are recorded separately in `logs/model-usage.sqlite3` (override with
+`MEMORY_USAGE_LOG_PATH`; use a persistent mount in containers). Records include
+run/call IDs, model, operation, system-prompt hash, reported input/output tokens,
+latency and outcome. Missing usage is NULL, never zero. Dry runs, retries and calls
+whose output later fails validation are retained independently of memory transactions.
+No prompt/response text or credentials are logged. Successful maintenance responses
+include `usage_run_id`. See the Chinese README for fields and querying examples.
+
+
+## Role-separated message ingestion
+
+See [message source schema and rollout](docs/database/message-sources.md) for `ingest_messages`, reply links, multi-valued content kinds, and compatibility. No `turn_id` is required. Legacy `ingest_turn` remains available.
+
+
+Daily workflow controls: manual runs default to `dry_run=true` and preview one batch.
+Scheduled runs save results. `batch_size` accepts 1–5 (default 5); `max_batches` accepts
+1–10 (default 10). The Actions job summary includes counts and server usage run IDs,
+never note/diary bodies. Token counts stay in the server's usage ledger. A timeout does
+not automatically retry a POST because server completion may be unknown. The workflow
+stops starting batches after 30 minutes (45-minute job limit).
+
+The Action calls the deployed `/maintenance/review-candidates` endpoint; it does not
+run the local Python implementation or deploy it. Deploy current code and migrations
+006/007 first to use selective work summaries and the new source schema.

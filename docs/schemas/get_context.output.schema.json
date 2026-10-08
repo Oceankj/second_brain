@@ -4,7 +4,11 @@
   "title": "get_context output",
   "type": "object",
   "additionalProperties": false,
-  "required": ["compact_context", "items", "generated_at"],
+  "required": [
+    "compact_context",
+    "items",
+    "generated_at"
+  ],
   "properties": {
     "compact_context": {
       "type": "string",
@@ -51,11 +55,19 @@
   "$defs": {
     "memory_item_type": {
       "type": "string",
-      "enum": ["note", "diary", "profile_memory"]
+      "enum": [
+        "note",
+        "diary",
+        "profile_memory"
+      ]
     },
     "memory_item_status": {
       "type": "string",
-      "enum": ["candidate", "active", "archived"]
+      "enum": [
+        "candidate",
+        "active",
+        "archived"
+      ]
     },
     "ingest_reason": {
       "type": "string",
@@ -73,7 +85,12 @@
     "memory_chunk": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "memory_item_id", "chunk_index", "content"],
+      "required": [
+        "id",
+        "memory_item_id",
+        "chunk_index",
+        "content"
+      ],
       "properties": {
         "id": {
           "type": "string",
@@ -91,18 +108,33 @@
           "type": "string"
         },
         "token_count": {
-          "type": ["integer", "null"],
+          "type": [
+            "integer",
+            "null"
+          ],
           "minimum": 0
         },
         "score": {
-          "type": ["number", "null"]
+          "type": [
+            "number",
+            "null"
+          ]
         }
       }
     },
     "context_memory_item": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "user_id", "type", "title", "body", "status", "created_at", "updated_at"],
+      "required": [
+        "id",
+        "user_id",
+        "type",
+        "title",
+        "body",
+        "status",
+        "created_at",
+        "updated_at"
+      ],
       "properties": {
         "id": {
           "type": "string",
@@ -134,7 +166,10 @@
           "$ref": "#/$defs/memory_item_status"
         },
         "event_date": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "format": "date"
         },
         "created_at": {
@@ -152,6 +187,59 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/memory_chunk"
+          }
+        },
+        "record_kind": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "role": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "session_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_message_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sequence": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "source_timestamp": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "content_kinds": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "event",
+              "thought",
+              "intention"
+            ]
           }
         }
       }

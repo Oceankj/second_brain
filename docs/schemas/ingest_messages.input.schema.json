@@ -1,0 +1,135 @@
+{
+  "$defs": {
+    "SourceMessage": {
+      "additionalProperties": false,
+      "properties": {
+        "source_message_id": {
+          "minLength": 1,
+          "title": "Source Message Id",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "user",
+            "assistant"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "body": {
+          "minLength": 1,
+          "title": "Body",
+          "type": "string"
+        },
+        "timestamp": {
+          "format": "date-time",
+          "title": "Timestamp",
+          "type": "string"
+        },
+        "sequence": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sequence"
+        },
+        "reply_to_message_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reply To Message Id"
+        },
+        "ingest_reason": {
+          "enum": [
+            "task_completed",
+            "explicit_memory_request",
+            "user_preference",
+            "stable_fact",
+            "personal_insight",
+            "decision",
+            "stable_artifact",
+            "manual_import"
+          ],
+          "title": "Ingest Reason",
+          "type": "string"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "content_kinds": {
+          "items": {
+            "enum": [
+              "event",
+              "thought",
+              "intention"
+            ],
+            "type": "string"
+          },
+          "title": "Content Kinds",
+          "type": "array"
+        }
+      },
+      "required": [
+        "source_message_id",
+        "role",
+        "body",
+        "timestamp",
+        "ingest_reason"
+      ],
+      "title": "SourceMessage",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "source": {
+      "minLength": 1,
+      "title": "Source",
+      "type": "string"
+    },
+    "session_id": {
+      "minLength": 1,
+      "title": "Session Id",
+      "type": "string"
+    },
+    "messages": {
+      "items": {
+        "$ref": "#/$defs/SourceMessage"
+      },
+      "maxItems": 50,
+      "minItems": 1,
+      "title": "Messages",
+      "type": "array"
+    },
+    "token": {
+      "minLength": 1,
+      "title": "Token",
+      "type": "string"
+    }
+  },
+  "required": [
+    "source",
+    "session_id",
+    "messages",
+    "token"
+  ],
+  "title": "IngestMessagesInput",
+  "type": "object"
+}

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date as CalendarDate
+from datetime import datetime
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 from personal_agent_memory.contracts.types import IngestReason, MemoryItemType
 
@@ -67,6 +69,47 @@ class CreateDailyDiaryInput(BaseModel):
         min_length=1,
         description="API token used to authenticate the caller and resolve user identity.",
     )
-    date: date
+    date: CalendarDate | None = None
     dry_run: bool = False
     force: bool = False
+
+
+class ReviewCandidatesInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    token: str = Field(min_length=1)
+    dry_run: bool = False
+    limit: int = Field(default=10, ge=1, le=50)
+
+
+class SourceMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_message_id: str = Field(min_length=1)
+    role: Literal["user", "assistant"]
+    body: str = Field(min_length=1)
+    timestamp: AwareDatetime
+    sequence: int | None = Field(default=None, ge=0)
+    reply_to_message_id: str | None = Field(default=None, min_length=1)
+    ingest_reason: IngestReason
+    tags: list[str] = Field(default_factory=list)
+    content_kinds: list[Literal["event", "thought", "intention"]] = Field(default_factory=list)
+
+
+class IngestMessagesData(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source: str = Field(min_length=1)
+    session_id: str = Field(min_length=1)
+    messages: list[SourceMessage] = Field(min_length=1, max_length=50)
+
+    @model_validator(mode="after")
+    def unique_messages(self):
+        ids = [message.source_message_id for message in self.messages]
+        if len(ids) != len(set(ids)):
+            raise ValueError("Duplicate source_message_id in batch")
+        return self
+
+
+class IngestMessagesInput(IngestMessagesData):
+    token: str = Field(min_length=1)

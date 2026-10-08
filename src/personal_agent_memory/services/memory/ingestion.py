@@ -81,6 +81,9 @@ class IngestionService:
                 title=candidate.title,
                 body=candidate.body,
                 status="candidate",
+                record_kind="source", role="mixed", source=payload.metadata.source,
+                session_id=payload.metadata.session_id,
+                source_timestamp=payload.metadata.timestamp,
             )
 
             await self._create_chunks(item["id"], candidate.body)

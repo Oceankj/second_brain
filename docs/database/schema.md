@@ -305,3 +305,8 @@ create index memory_chunks_embedding_idx
 on memory_chunks
 using hnsw (embedding vector_cosine_ops);
 ```
+
+
+## Role-separated message ingestion
+
+See [message source schema and rollout](message-sources.md) for `ingest_messages`, reply links, multi-valued content kinds, and compatibility. No `turn_id` is required. Legacy `ingest_turn` remains available.

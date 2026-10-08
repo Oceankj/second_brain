@@ -13,6 +13,8 @@ def test_create_http_server_includes_mcp_and_rest_routes() -> None:
     assert "/mcp" in paths
     assert "/health" in paths
     assert "/maintenance/daily-diary" in paths
+    assert "/maintenance/review-candidates" in paths
+    assert "/diary/{date:str}" in paths
     assert "/users" not in paths
     assert "/users/{user_id:str}" not in paths
 
