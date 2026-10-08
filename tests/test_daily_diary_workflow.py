@@ -16,7 +16,7 @@ def run_workflow(monkeypatch, tmp_path, results, *, dry_run="false", max_batches
     python = source.split("python3 - <<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
     for key, value in {
         "MEMORY_BASE_URL": "https://memory.example",
-        "MEMORY_DIARY_TOKEN": "private-token",
+        "MEMORY_DEFAULT_USER_TOKEN": "private-token",
         "DRY_RUN": dry_run,
         "MAX_BATCHES": max_batches,
         "BATCH_SIZE": "2",

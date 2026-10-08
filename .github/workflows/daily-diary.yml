@@ -35,7 +35,7 @@ jobs:
       - name: Review pending notes and create diaries
         env:
           MEMORY_BASE_URL: ${{ secrets.MEMORY_BASE_URL }}
-          MEMORY_DIARY_TOKEN: ${{ secrets.MEMORY_DIARY_TOKEN }}
+          MEMORY_DEFAULT_USER_TOKEN: ${{ secrets.MEMORY_DEFAULT_USER_TOKEN }}
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
           BATCH_SIZE: ${{ inputs.batch_size || '5' }}
           MAX_BATCHES: ${{ inputs.max_batches || '10' }}
@@ -50,11 +50,11 @@ jobs:
           import urllib.request
 
           base_url = os.environ['MEMORY_BASE_URL'].rstrip('/')
-          token = os.environ['MEMORY_DIARY_TOKEN']
+          token = os.environ['MEMORY_DEFAULT_USER_TOKEN']
           parsed = urllib.parse.urlsplit(base_url)
           if (parsed.scheme != 'https' or not parsed.hostname or not token
                   or parsed.username or parsed.password or parsed.query or parsed.fragment):
-              raise SystemExit('Configure MEMORY_BASE_URL (HTTPS) and MEMORY_DIARY_TOKEN secrets')
+              raise SystemExit('Configure MEMORY_BASE_URL (HTTPS) and MEMORY_DEFAULT_USER_TOKEN secrets')
           dry_run = os.environ.get('DRY_RUN', 'true').lower()
           if dry_run not in {'true', 'false'}:
               raise SystemExit('Invalid DRY_RUN value')

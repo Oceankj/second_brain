@@ -208,7 +208,7 @@ curl --fail-with-body http://127.0.0.1:8001/diary/2026-10-01 \
 [Daily maintenance GitHub workflow](.github/workflows/daily-diary.yml) 每天 10:17 UTC 呼叫 candidate review（洛杉磯冬令 02:17／夏令 03:17）。每批 5 筆，單次最多 10 批；仍有 backlog 時 workflow 失敗提示重跑，下一次從剩餘 candidates 繼續。啟用方式：
 
 1. 部署新版 server，設定 `daily_diary.timezone`（例如 `America/Los_Angeles`）與 summary provider。
-2. 在 GitHub repository secrets 設定 `MEMORY_BASE_URL`（HTTPS origin）與 `MEMORY_DIARY_TOKEN`（目標使用者的 API token；不是 MCP OAuth access token）。
+2. 在 GitHub repository secrets 設定 `MEMORY_BASE_URL`（HTTPS origin）與 `MEMORY_DEFAULT_USER_TOKEN`（填入正式 server 上同名環境變數的值；不是 MCP OAuth access token）。GitHub Actions 不會自動讀取本機 `.env` 或 Render 的環境變數，因此仍需在 GitHub 設定一次。
 3. 將 workflow 放到 default branch。先用手動 `workflow_dispatch`，保持 `dry_run=true`；正式執行時取消 dry run，或等每日排程。
 4. workflow 不再接受 `date`，因為 candidate backlog 自帶來源日期。手動單日摘要仍可呼叫 `/maintenance/daily-diary`。停用 GitHub Actions 中的 workflow 即可停止排程。
 

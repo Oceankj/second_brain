@@ -192,9 +192,11 @@ utility; it does not review candidates. Both maintenance endpoints support
 `dry_run` and use the existing user API token in the Bearer header.
 
 The [workflow](.github/workflows/daily-diary.yml) reviews candidates at 10:17 UTC,
-up to 10 batches of 5. Configure `MEMORY_BASE_URL` and `MEMORY_DIARY_TOKEN` GitHub
+up to 10 batches of 5. Configure `MEMORY_BASE_URL` and `MEMORY_DEFAULT_USER_TOKEN` GitHub
 repository secrets, deploy the new server, and add the workflow to the default
-branch to enable it. Manual runs default to preview and no longer accept a date.
+branch to enable it. Use the same `MEMORY_DEFAULT_USER_TOKEN` value configured on
+the deployed server; Actions does not inherit local `.env` or Render environment
+variables. Manual runs default to preview and no longer accept a date.
 See the [Chinese setup guide](README.zh.md) for API behavior and limits.
 
 ### Model usage ledger
