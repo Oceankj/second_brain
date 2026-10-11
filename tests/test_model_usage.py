@@ -139,3 +139,71 @@ async def test_concurrent_runs_do_not_mix_context(monkeypatch):
     ids = await asyncio.gather(run("one"), run("two"))
     assert {r["run_id"] for r in rows("model_calls")} == set(ids)
     assert all(r["status"] == "succeeded" for r in rows("usage_runs"))
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("phase", ["open", "execute", "commit"])
+@pytest.mark.parametrize("operation_fails", [False, True])
+async def test_ledger_failure_preserves_memory_and_provider_outcomes(
+    monkeypatch, caplog, phase, operation_fails
+):
+    from contextlib import contextmanager
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from personal_agent_memory.providers import usage
+    from personal_agent_memory.services.memory import MemoryService
+
+    @contextmanager
+    def broken_ledger():
+        if phase == "open":
+            raise PermissionError(13, "Permission denied", "logs")
+
+        def execute(*args):
+            if phase == "execute":
+                raise sqlite3.OperationalError("private database failure")
+
+        yield SimpleNamespace(execute=execute)
+        if phase == "commit":
+            raise sqlite3.OperationalError("private commit failure")
+
+    monkeypatch.setattr(usage, "ledger", broken_ledger)
+    respond(monkeypatch, {"response": "ok"})
+    original_error = RuntimeError("original operation failure")
+
+    async def ingest(*args, **kwargs):
+        assert await provider().summarize(system_prompt="prompt", user_prompt="note") == "ok"
+        if operation_fails:
+            raise original_error
+        return {"saved": True}
+
+    service = object.__new__(MemoryService)
+    service.ingestion = SimpleNamespace(ingest_turn=AsyncMock(side_effect=ingest))
+    if operation_fails:
+        with pytest.raises(RuntimeError) as caught:
+            await service.ingest_turn_as_user(object(), user_id="alice")
+        assert caught.value is original_error
+    else:
+        assert await service.ingest_turn_as_user(object(), user_id="alice") == {"saved": True}
+    service.ingestion.ingest_turn.assert_awaited_once()
+    assert "Model usage recording failed" in caplog.text
+    assert "private" not in caplog.text
+    assert usage._RUN.get() is None
+    assert usage._CALL.get() is None
+
+
+@pytest.mark.anyio
+async def test_provider_error_not_masked_by_unwritable_ledger(monkeypatch, tmp_path):
+    blocked = tmp_path / "not-a-directory"
+    blocked.write_text("file")
+    monkeypatch.setenv("MEMORY_USAGE_LOG_PATH", str(blocked / "usage.sqlite3"))
+    original = TimeoutError("upstream failed")
+
+    def fail(*args, **kwargs):
+        raise original
+
+    monkeypatch.setattr(urllib.request, "urlopen", fail)
+    with pytest.raises(TimeoutError) as caught:
+        with usage_run("ingest_turn"):
+            await provider().summarize(system_prompt="prompt", user_prompt="note")
+    assert caught.value is original

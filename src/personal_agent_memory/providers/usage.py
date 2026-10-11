@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import sqlite3
 import time
@@ -12,6 +13,8 @@ from datetime import UTC, datetime
 from functools import wraps
 from pathlib import Path
 from uuid import uuid4
+
+_LOGGER = logging.getLogger(__name__)
 
 _RUN: ContextVar[dict | None] = ContextVar("usage_run", default=None)
 _STAGE: ContextVar[str | None] = ContextVar("usage_stage", default=None)
@@ -41,6 +44,18 @@ def ledger():
         yield conn
 
 
+def _record(statement: str, parameters: tuple) -> None:
+    """Telemetry storage failure must never alter a memory/provider outcome."""
+    try:
+        with ledger() as conn:
+            conn.execute(statement, parameters)
+    except (OSError, sqlite3.Error) as exc:
+        # Do not log exception text: it can contain paths or private data.
+        _LOGGER.warning(
+            "Model usage recording failed (%s); continuing operation", type(exc).__name__
+        )
+
+
 def now() -> str:
     return datetime.now(UTC).isoformat()
 
@@ -49,11 +64,10 @@ def now() -> str:
 def usage_run(operation: str, *, dry_run: bool | None = None):
     """Keep run outcome even when validation or a memory DB transaction fails."""
     run = {"run_id": str(uuid4()), "operation": operation, "dry_run": dry_run}
-    with ledger() as conn:
-        conn.execute(
-            "insert into usage_runs values (?, ?, ?, ?, null, 'running', null)",
-            (run["run_id"], operation, dry_run, now()),
-        )
+    _record(
+        "insert into usage_runs values (?, ?, ?, ?, null, 'running', null)",
+        (run["run_id"], operation, dry_run, now()),
+    )
     token = _RUN.set(run)
     status, error = "succeeded", None
     try:
@@ -63,11 +77,10 @@ def usage_run(operation: str, *, dry_run: bool | None = None):
         raise
     finally:
         _RUN.reset(token)
-        with ledger() as conn:
-            conn.execute(
-                "update usage_runs set status=?, error_type=?, finished_at=? where run_id=?",
-                (status, error, now(), run["run_id"]),
-            )
+        _record(
+            "update usage_runs set status=?, error_type=?, finished_at=? where run_id=?",
+            (status, error, now(), run["run_id"]),
+        )
 
 
 @contextmanager
@@ -132,24 +145,23 @@ def track_usage(*, provider: str, operation: str):
             call_id = str(uuid4())
             prompt = kwargs.get("system_prompt")
             prompt_hash = hashlib.sha256(prompt.encode()).hexdigest() if prompt else None
-            with ledger() as conn:
-                conn.execute(
-                    """insert into model_calls (
+            _record(
+                """insert into model_calls (
                     call_id, run_id, provider, model, operation, prompt_hash, started_at, status,
                     max_output_tokens, temperature)
                     values (?, ?, ?, ?, ?, ?, ?, 'started', ?, ?)""",
-                    (
-                        call_id,
-                        run["run_id"] if run else None,
-                        provider,
-                        self.model,
-                        _STAGE.get() or operation,
-                        prompt_hash,
-                        now(),
-                        getattr(self, "max_tokens", None),
-                        getattr(self, "temperature", None),
-                    ),
-                )
+                (
+                    call_id,
+                    run["run_id"] if run else None,
+                    provider,
+                    self.model,
+                    _STAGE.get() or operation,
+                    prompt_hash,
+                    now(),
+                    getattr(self, "max_tokens", None),
+                    getattr(self, "temperature", None),
+                ),
+            )
             stats = {"provider": provider}
             token = _CALL.set(stats)
             started = time.monotonic()
@@ -162,23 +174,22 @@ def track_usage(*, provider: str, operation: str):
             finally:
                 _CALL.reset(token)
                 elapsed_ms = round((time.monotonic() - started) * 1000)
-                with ledger() as conn:
-                    conn.execute(
-                        """update model_calls set elapsed_ms=?, status=?, error_type=?,
+                _record(
+                    """update model_calls set elapsed_ms=?, status=?, error_type=?,
                         input_tokens=?, output_tokens=?, total_tokens=?, usage_source=?,
                         total_tokens_source=? where call_id=?""",
-                        (
-                            elapsed_ms,
-                            status,
-                            error,
-                            stats.get("input_tokens"),
-                            stats.get("output_tokens"),
-                            stats.get("total_tokens"),
-                            stats.get("usage_source", "unknown"),
-                            stats.get("total_tokens_source", "unknown"),
-                            call_id,
-                        ),
-                    )
+                    (
+                        elapsed_ms,
+                        status,
+                        error,
+                        stats.get("input_tokens"),
+                        stats.get("output_tokens"),
+                        stats.get("total_tokens"),
+                        stats.get("usage_source", "unknown"),
+                        stats.get("total_tokens_source", "unknown"),
+                        call_id,
+                    ),
+                )
 
         return wrapped
 

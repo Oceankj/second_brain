@@ -16,7 +16,8 @@ ENV PATH="/app/.venv/bin:$PATH" \
 WORKDIR /app
 
 RUN useradd --create-home --shell /usr/sbin/nologin appuser \
-    && mkdir -p /app/config
+    && mkdir -p /app/config /app/logs \
+    && chown appuser:appuser /app/logs
 
 COPY pyproject.toml uv.lock README.md README.zh.md ./
 RUN uv sync --frozen --no-dev --no-install-project
