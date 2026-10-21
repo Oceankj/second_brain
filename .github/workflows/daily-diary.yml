@@ -24,7 +24,9 @@ on:
 permissions: {}
 
 concurrency:
-  group: daily-diary
+  # Version the group so runs queued while Actions was disabled cannot block
+  # current executions. New runs of this workflow remain serialized.
+  group: daily-diary-v2
   cancel-in-progress: false
 
 jobs:
