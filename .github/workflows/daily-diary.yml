@@ -39,7 +39,9 @@ jobs:
           MEMORY_BASE_URL: ${{ secrets.MEMORY_BASE_URL }}
           MEMORY_DEFAULT_USER_TOKEN: ${{ secrets.MEMORY_DEFAULT_USER_TOKEN }}
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
-          BATCH_SIZE: ${{ inputs.batch_size || '5' }}
+          # Keep scheduled requests short enough for the deployed HTTP proxy.
+          # Manual runs may still choose a larger batch for controlled testing.
+          BATCH_SIZE: ${{ github.event_name == 'schedule' && '1' || inputs.batch_size || '5' }}
           MAX_BATCHES: ${{ inputs.max_batches || '10' }}
         run: |
           python3 - <<'PY'
@@ -88,12 +90,28 @@ jobs:
           class NoRedirect(urllib.request.HTTPRedirectHandler):
               def redirect_request(self, req, fp, code, msg, headers, newurl):
                   return None
+          opener = urllib.request.build_opener(NoRedirect)
+          health_request = urllib.request.Request(base_url + '/health', method='GET')
+          for attempt in range(6):
+              try:
+                  with opener.open(health_request, timeout=10) as response:
+                      health = json.load(response)
+                  if isinstance(health, dict) and health.get('status') == 'ok':
+                      print('Server healthy before maintenance request')
+                      break
+              except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError,
+                      ValueError, UnicodeError):
+                  pass
+              if attempt == 5:
+                  summary('\nServer health check did not become ready; no maintenance POST was sent.')
+                  raise SystemExit('Server health check failed')
+              time.sleep(5)
           for batch in range(max_batches):
               if time.monotonic() - started >= 1800:
                   summary('\nStopped at the time budget; remaining candidates can run next time.')
                   raise SystemExit('Time budget reached; rerun to continue')
               try:
-                  with urllib.request.build_opener(NoRedirect).open(request, timeout=600) as response:
+                  with opener.open(request, timeout=600) as response:
                       result = json.load(response)
               except urllib.error.HTTPError as exc:
                   summary(f'\nRequest failed: HTTP {exc.code}. No automatic POST retry.')

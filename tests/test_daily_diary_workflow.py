@@ -11,7 +11,15 @@ import pytest
 WORKFLOW = Path(".github/workflows/daily-diary.yml")
 
 
-def run_workflow(monkeypatch, tmp_path, results, *, dry_run="false", max_batches="10"):
+def run_workflow(
+    monkeypatch,
+    tmp_path,
+    results,
+    *,
+    dry_run="false",
+    max_batches="10",
+    health_results=None,
+):
     source = textwrap.dedent(WORKFLOW.read_text().split("        run: |\n", 1)[1])
     python = source.split("python3 - <<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
     for key, value in {
@@ -25,8 +33,16 @@ def run_workflow(monkeypatch, tmp_path, results, *, dry_run="false", max_batches
         monkeypatch.setenv(key, value)
     requests = []
     responses = iter(results)
+    health_responses = iter(health_results or [{"status": "ok"}])
+    health_calls = []
 
     def open_request(request, timeout):
+        if request.data is None:
+            health_calls.append((request.full_url, timeout))
+            value = next(health_responses)
+            if isinstance(value, Exception):
+                raise value
+            return io.BytesIO(json.dumps(value).encode())
         requests.append(json.loads(request.data))
         value = next(responses)
         if isinstance(value, Exception):
@@ -38,7 +54,8 @@ def run_workflow(monkeypatch, tmp_path, results, *, dry_run="false", max_batches
         return SimpleNamespace(open=open_request)
 
     monkeypatch.setattr(urllib.request, "build_opener", opener)
-    return lambda: exec(compile(python, str(WORKFLOW), "exec"), {}), requests
+    monkeypatch.setattr("time.sleep", lambda _: None)
+    return lambda: exec(compile(python, str(WORKFLOW), "exec"), {}), requests, health_calls
 
 
 def result(status, remaining=False):
@@ -52,16 +69,19 @@ def result(status, remaining=False):
 
 
 def test_preview_is_one_request_and_logs_no_content(monkeypatch, tmp_path, capsys):
-    run, requests = run_workflow(monkeypatch, tmp_path, [result("preview", True)], dry_run="true")
+    run, requests, health_calls = run_workflow(
+        monkeypatch, tmp_path, [result("preview", True)], dry_run="true"
+    )
     run()
     assert requests == [{"dry_run": True, "limit": 2}]
+    assert health_calls == [("https://memory.example/health", 10)]
     log = capsys.readouterr().out + (tmp_path / "summary.md").read_text()
     assert "12345678-1234-1234-1234-123456789012" in log
     assert "private-note" not in log and "private-diary" not in log and "private-token" not in log
 
 
 def test_save_drains_batches(monkeypatch, tmp_path):
-    run, requests = run_workflow(
+    run, requests, _ = run_workflow(
         monkeypatch, tmp_path, [result("accepted", True), result("accepted")]
     )
     run()
@@ -69,14 +89,16 @@ def test_save_drains_batches(monkeypatch, tmp_path):
 
 
 def test_batch_limit_stops_without_extra_post(monkeypatch, tmp_path):
-    run, requests = run_workflow(monkeypatch, tmp_path, [result("accepted", True)], max_batches="1")
+    run, requests, _ = run_workflow(
+        monkeypatch, tmp_path, [result("accepted", True)], max_batches="1"
+    )
     with pytest.raises(SystemExit, match="Batch limit"):
         run()
     assert len(requests) == 1
 
 
 def test_timeout_does_not_retry_uncertain_write(monkeypatch, tmp_path):
-    run, requests = run_workflow(monkeypatch, tmp_path, [TimeoutError("private failure")])
+    run, requests, _ = run_workflow(monkeypatch, tmp_path, [TimeoutError("private failure")])
     with pytest.raises(SystemExit, match="connection error or timeout"):
         run()
     assert len(requests) == 1
@@ -84,6 +106,31 @@ def test_timeout_does_not_retry_uncertain_write(monkeypatch, tmp_path):
 
 
 def test_save_rejects_preview_response(monkeypatch, tmp_path):
-    run, _ = run_workflow(monkeypatch, tmp_path, [result("preview")])
+    run, _, _ = run_workflow(monkeypatch, tmp_path, [result("preview")])
     with pytest.raises(SystemExit, match="unexpected status"):
         run()
+
+
+def test_health_check_retries_before_post(monkeypatch, tmp_path):
+    run, requests, health_calls = run_workflow(
+        monkeypatch,
+        tmp_path,
+        [result("accepted")],
+        health_results=[TimeoutError("cold start"), {"status": "ok"}],
+    )
+    run()
+    assert len(health_calls) == 2
+    assert len(requests) == 1
+
+
+def test_health_check_failure_sends_no_post(monkeypatch, tmp_path):
+    run, requests, health_calls = run_workflow(
+        monkeypatch,
+        tmp_path,
+        [],
+        health_results=[TimeoutError("cold start")] * 6,
+    )
+    with pytest.raises(SystemExit, match="health check failed"):
+        run()
+    assert len(health_calls) == 6
+    assert requests == []

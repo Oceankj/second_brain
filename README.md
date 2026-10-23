@@ -192,7 +192,9 @@ utility; it does not review candidates. Both maintenance endpoints support
 `dry_run` and use the existing user API token in the Bearer header.
 
 The [workflow](.github/workflows/daily-diary.yml) reviews candidates at 10:17 UTC,
-up to 10 batches of 5. Configure `MEMORY_BASE_URL` and `MEMORY_DEFAULT_USER_TOKEN` GitHub
+first waiting for the public `/health` endpoint to become ready, then processing up
+to 10 batches of 1. Manual runs may select a batch size from 1 to 5. Configure
+`MEMORY_BASE_URL` and `MEMORY_DEFAULT_USER_TOKEN` GitHub
 repository secrets, deploy the new server, and add the workflow to the default
 branch to enable it. Use the same `MEMORY_DEFAULT_USER_TOKEN` value configured on
 the deployed server; Actions does not inherit local `.env` or Render environment
@@ -216,7 +218,8 @@ See [message source schema and rollout](docs/database/message-sources.md) for `i
 
 
 Daily workflow controls: manual runs default to `dry_run=true` and preview one batch.
-Scheduled runs save results. `batch_size` accepts 1–5 (default 5); `max_batches` accepts
+Scheduled runs save results in batches of 1 after a bounded `/health` warm-up.
+Manual `batch_size` accepts 1–5 (default 5); `max_batches` accepts
 1–10 (default 10). The Actions job summary includes counts and server usage run IDs,
 never note/diary bodies. Token counts stay in the server's usage ledger. A timeout does
 not automatically retry a POST because server completion may be unknown. The workflow

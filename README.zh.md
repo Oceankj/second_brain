@@ -205,7 +205,7 @@ curl --fail-with-body http://127.0.0.1:8001/diary/2026-10-01 \
 
 保留的 `POST /maintenance/daily-diary` 是單日摘要工具，不會整理或消耗 candidates。省略 `date` 仍代表伺服器時區的昨天；`dry_run=true` 可預覽，`force=true` 可重建既有 diary。素材包含原日期的原始 notes，以及因整理而封存的 originals；排除整理產生的衍生 notes，避免重複摘要。讀取不存在的 diary 回傳 404，日期無效回傳 400。
 
-[Daily maintenance GitHub workflow](.github/workflows/daily-diary.yml) 每天 10:17 UTC 呼叫 candidate review（洛杉磯冬令 02:17／夏令 03:17）。每批 5 筆，單次最多 10 批；仍有 backlog 時 workflow 失敗提示重跑，下一次從剩餘 candidates 繼續。啟用方式：
+[Daily maintenance GitHub workflow](.github/workflows/daily-diary.yml) 每天 10:17 UTC 呼叫 candidate review（洛杉磯冬令 02:17／夏令 03:17）。排程會先有限度重試公開的 `/health` 端點來喚醒並確認服務，再以每批 1 筆、單次最多 10 批處理；手動執行仍可選 1–5 筆。仍有 backlog 時 workflow 失敗提示重跑，下一次從剩餘 candidates 繼續。啟用方式：
 
 1. 部署新版 server，設定 `daily_diary.timezone`（例如 `America/Los_Angeles`）與 summary provider。
 2. 在 GitHub repository secrets 設定 `MEMORY_BASE_URL`（HTTPS origin）與 `MEMORY_DEFAULT_USER_TOKEN`（填入正式 server 上同名環境變數的值；不是 MCP OAuth access token）。GitHub Actions 不會自動讀取本機 `.env` 或 Render 的環境變數，因此仍需在 GitHub 設定一次。
@@ -465,7 +465,7 @@ See [message source schema and rollout](docs/database/message-sources.md) for `i
 
 
 手動執行可選 `batch_size`（1–5，預設 5）與 `max_batches`（1–10，預設 10）。
-`dry_run=true` 只預覽一批；每日排程則正式儲存。Actions summary 只顯示處理筆數與
+`dry_run=true` 只預覽一批；每日排程會先確認 `/health`，再以每批 1 筆正式儲存。Actions summary 只顯示處理筆數與
 server usage run ID，不含 note／diary 正文；實際 token 數仍留在伺服器的 usage ledger。
 POST 逾時不自動重試，因為伺服器可能已完成寫入。30 分鐘後不再開始新批次，job 最長 45 分鐘。
 
