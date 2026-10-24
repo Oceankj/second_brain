@@ -194,17 +194,22 @@ class CandidateReviewService:
         )
         if len(prompt) > self.diary.source_max_chars:
             raise InvalidReview("Candidates and reply context exceed source budget")
-        with usage_stage("candidate_plan"):
-            raw = await self.diary.summary_provider_factory().summarize(
-                system_prompt=REVIEW_PROMPT,
-                user_prompt=prompt,
-            )
         plan_mode = "model_validated"
+        fallback_reason = None
         try:
+            with usage_stage("candidate_plan"):
+                raw = await self.diary.summary_provider_factory().summarize(
+                    system_prompt=REVIEW_PROMPT,
+                    user_prompt=prompt,
+                )
             plan = validate_plan(raw, selected, related)
         except InvalidReview:
-            # Reject the entire generated plan, including all proposed links.
-            # Preserve evidence without letting malformed model output block the queue.
+            fallback_reason = "invalid_model_plan"
+        except (RuntimeError, TimeoutError, OSError):
+            fallback_reason = "summary_unavailable"
+        if fallback_reason:
+            # Reject all generated content and proposed links. Summary availability
+            # must not block lossless promotion; embeddings and DB writes still fail closed.
             plan = ReviewPlan(
                 notes=[
                     ReviewedNote(title=item["title"], body=item["body"], source_ids=[item["id"]])
@@ -252,6 +257,7 @@ class CandidateReviewService:
             "status": "preview",
             "candidate_ids": selected_ids,
             "plan_mode": plan_mode,
+            "plan_fallback_reason": fallback_reason,
             "has_more": len(candidates) > len(selected),
             "notes": [note.model_dump() for note in plan.notes],
             "diaries": [
@@ -303,7 +309,12 @@ class CandidateReviewService:
                 ):
                     raise ReviewConflict("Diary changed; retry the review")
             notes = await self._save_notes(
-                plan, selected, prepared_notes, user_id=user_id, plan_mode=plan_mode
+                plan,
+                selected,
+                prepared_notes,
+                user_id=user_id,
+                plan_mode=plan_mode,
+                fallback_reason=fallback_reason,
             )
             saved_diaries = []
             for d, chunks in zip(diaries, prepared_diaries, strict=True):
@@ -395,6 +406,7 @@ class CandidateReviewService:
         *,
         user_id: str,
         plan_mode: str,
+        fallback_reason: str | None,
     ) -> list[dict]:
         repo = self.repository
         sources = {s["id"]: s for s in selected}
@@ -432,6 +444,7 @@ class CandidateReviewService:
                     "source_dates": [d.isoformat() for d in dates],
                     "related_item_ids": note.related_ids,
                     "plan_mode": plan_mode,
+                    "plan_fallback_reason": fallback_reason,
                 },
             )
             for source_id in note.source_ids:

@@ -153,9 +153,22 @@ async def test_changed_candidate_aborts_before_writes():
 
 
 @pytest.mark.anyio
-async def test_provider_failure_keeps_candidates_pending():
-    service, repo, summary, _ = setup_review([source("a", "2026-08-29")])
-    summary.summarize.side_effect = RuntimeError("provider unavailable")
+@pytest.mark.parametrize("error", [RuntimeError("unavailable"), TimeoutError("timeout")])
+async def test_summary_failure_promotes_originals_with_auditable_fallback(error):
+    item = source("a", "2026-08-29")
+    service, repo, summary, _ = setup_review([item])
+    summary.summarize.side_effect = error
+    result = await service.review(ReviewCandidatesInput(token="t"), user_id="user-local")
+    assert result["status"] == "accepted"
+    assert result["plan_fallback_reason"] == "summary_unavailable"
+    assert result["notes"][0]["body"] == item["body"]
+    assert repo.memory_items.archived == ["a"]
+
+
+@pytest.mark.anyio
+async def test_embedding_failure_does_not_consume_candidates():
+    service, repo, _, embedding = setup_review([source("a", "2026-08-29")])
+    embedding.embed_text = AsyncMock(side_effect=RuntimeError("embedding unavailable"))
     with pytest.raises(RuntimeError):
         await service.review(ReviewCandidatesInput(token="t"), user_id="user-local")
     assert repo.memory_items.created == repo.memory_items.archived == []

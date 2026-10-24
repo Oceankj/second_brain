@@ -205,14 +205,14 @@ curl --fail-with-body http://127.0.0.1:8001/diary/2026-10-01 \
 
 保留的 `POST /maintenance/daily-diary` 是單日摘要工具，不會整理或消耗 candidates。省略 `date` 仍代表伺服器時區的昨天；`dry_run=true` 可預覽，`force=true` 可重建既有 diary。素材包含原日期的原始 notes，以及因整理而封存的 originals；排除整理產生的衍生 notes，避免重複摘要。讀取不存在的 diary 回傳 404，日期無效回傳 400。
 
-[Daily maintenance GitHub workflow](.github/workflows/daily-diary.yml) 每天 10:17 UTC 呼叫 candidate review（洛杉磯冬令 02:17／夏令 03:17）。排程會先有限度重試公開的 `/health` 端點來喚醒並確認服務，再以每批 1 筆、單次最多 10 批處理；手動執行仍可選 1–5 筆。仍有 backlog 時 workflow 失敗提示重跑，下一次從剩餘 candidates 繼續。啟用方式：
+[Daily maintenance GitHub workflow](.github/workflows/daily-diary.yml) 每天 10:17 UTC 呼叫 candidate review（洛杉磯冬令 02:17／夏令 03:17）。排程會先有限度重試公開的 `/health` 端點來喚醒並確認服務，再以每批 1 筆、單次最多 10 批處理；手動執行仍可選 1–5 筆。達到批次或時間上限時以 warning 提示仍有 backlog，正常結束，下一次從剩餘 candidates 繼續。啟用方式：
 
 1. 部署新版 server，設定 `daily_diary.timezone`（例如 `America/Los_Angeles`）與 summary provider。
 2. 在 GitHub repository secrets 設定 `MEMORY_BASE_URL`（HTTPS origin）與 `MEMORY_DEFAULT_USER_TOKEN`（填入正式 server 上同名環境變數的值；不是 MCP OAuth access token）。GitHub Actions 不會自動讀取本機 `.env` 或 Render 的環境變數，因此仍需在 GitHub 設定一次。
 3. 將 workflow 放到 default branch。先用手動 `workflow_dispatch`，保持 `dry_run=true`；正式執行時取消 dry run，或等每日排程。
 4. workflow 不再接受 `date`，因為 candidate backlog 自帶來源日期。手動單日摘要仍可呼叫 `/maintenance/daily-diary`。停用 GitHub Actions 中的 workflow 即可停止排程。
 
-模型整理計畫若格式錯誤、漏掉來源或引用未提供的 ID，會整份丟棄，改為逐筆保留原 title/body，不採用模型提出的 related links；回應與建立事件記錄 `plan_mode=verbatim_fallback`。Provider 故障、來源超出預算或並行修改仍會停止，不消耗 candidates。
+摘要服務故障／逾時也使用原文回退。模型整理計畫若格式錯誤、漏掉來源或引用未提供的 ID，會整份丟棄，改為逐筆保留原 title/body，不採用模型提出的 related links；回應與建立事件記錄 `plan_mode=verbatim_fallback`。Embedding 故障、來源超出預算或並行修改仍會停止，不消耗 candidates。
 
 CI log 只顯示批次狀態，不輸出日記與來源內容。preview 會使用 embedding 搜尋及 summary provider，但不改 DB。這份設定檔不代表線上排程已啟用；本流程也不代表系統保存了所有原始對話。
 

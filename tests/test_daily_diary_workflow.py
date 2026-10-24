@@ -92,8 +92,8 @@ def test_batch_limit_stops_without_extra_post(monkeypatch, tmp_path):
     run, requests, _ = run_workflow(
         monkeypatch, tmp_path, [result("accepted", True)], max_batches="1"
     )
-    with pytest.raises(SystemExit, match="Batch limit"):
-        run()
+    run()
+    assert "remaining candidates will continue" in (tmp_path / "summary.md").read_text()
     assert len(requests) == 1
 
 
@@ -134,3 +134,12 @@ def test_health_check_failure_sends_no_post(monkeypatch, tmp_path):
         run()
     assert len(health_calls) == 6
     assert requests == []
+
+
+def test_time_budget_defers_without_another_post(monkeypatch, tmp_path, capsys):
+    run, requests, _ = run_workflow(monkeypatch, tmp_path, [result("accepted", True)])
+    ticks = iter([0, 0, 1801])
+    monkeypatch.setattr("time.monotonic", lambda: next(ticks))
+    run()
+    assert len(requests) == 1
+    assert "::warning::Time budget reached" in capsys.readouterr().out

@@ -201,7 +201,9 @@ the deployed server; Actions does not inherit local `.env` or Render environment
 variables. Manual runs default to preview and no longer accept a date.
 See the [Chinese setup guide](README.zh.md) for API behavior and limits.
 
-Invalid model review plans are discarded in full. Candidates are promoted individually with their original title/body and no model-proposed related links; `plan_mode=verbatim_fallback` is recorded in the response and creation events. Provider outages, source-budget errors, and concurrent changes still fail without consuming candidates.
+Invalid model review plans are discarded in full; summary service errors/timeouts use the same lossless fallback. Candidates are promoted individually with their original title/body and no model-proposed related links; `plan_mode=verbatim_fallback` is recorded in the response and creation events. Embedding outages, source-budget errors, and concurrent changes still fail without consuming candidates.
+
+Batch/time limits finish successfully with a warning that candidates remain for the next run. Actual request, validation, or no-progress errors still fail the workflow.
 
 ### Model usage ledger
 
