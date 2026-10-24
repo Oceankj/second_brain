@@ -138,6 +138,9 @@ jobs:
                   run_id = 'unavailable'
               summary(f'| {batch + 1} | {status} | {len(notes)} | {len(diaries)} | '
                       f'{remaining} | {run_id} |')
+              if result.get('plan_mode') == 'verbatim_fallback':
+                  summary('\nInvalid model plan rejected; original notes preserved verbatim.')
+                  print('Review plan: verbatim fallback')
               # Keep note bodies, diary text, and source evidence out of CI logs.
               print('Batch', batch + 1, status, 'remaining:', bool(result.get('has_more')))
               if payload['dry_run'] or not remaining:

@@ -199,7 +199,19 @@ class CandidateReviewService:
                 system_prompt=REVIEW_PROMPT,
                 user_prompt=prompt,
             )
-        plan = validate_plan(raw, selected, related)
+        plan_mode = "model_validated"
+        try:
+            plan = validate_plan(raw, selected, related)
+        except InvalidReview:
+            # Reject the entire generated plan, including all proposed links.
+            # Preserve evidence without letting malformed model output block the queue.
+            plan = ReviewPlan(
+                notes=[
+                    ReviewedNote(title=item["title"], body=item["body"], source_ids=[item["id"]])
+                    for item in selected
+                ]
+            )
+            plan_mode = "verbatim_fallback"
         days = sorted({item["source_date"] for item in selected})
         selected_ids = [item["id"] for item in selected]
         diaries = []
@@ -239,6 +251,7 @@ class CandidateReviewService:
         preview = {
             "status": "preview",
             "candidate_ids": selected_ids,
+            "plan_mode": plan_mode,
             "has_more": len(candidates) > len(selected),
             "notes": [note.model_dump() for note in plan.notes],
             "diaries": [
@@ -289,7 +302,9 @@ class CandidateReviewService:
                     [d["existing"]] if d["existing"] else [],
                 ):
                     raise ReviewConflict("Diary changed; retry the review")
-            notes = await self._save_notes(plan, selected, prepared_notes, user_id=user_id)
+            notes = await self._save_notes(
+                plan, selected, prepared_notes, user_id=user_id, plan_mode=plan_mode
+            )
             saved_diaries = []
             for d, chunks in zip(diaries, prepared_diaries, strict=True):
                 if d["existing"]:
@@ -373,7 +388,13 @@ class CandidateReviewService:
         )
 
     async def _save_notes(
-        self, plan: ReviewPlan, selected: list[dict], prepared: list, *, user_id: str
+        self,
+        plan: ReviewPlan,
+        selected: list[dict],
+        prepared: list,
+        *,
+        user_id: str,
+        plan_mode: str,
     ) -> list[dict]:
         repo = self.repository
         sources = {s["id"]: s for s in selected}
@@ -410,6 +431,7 @@ class CandidateReviewService:
                     "source_item_ids": note.source_ids,
                     "source_dates": [d.isoformat() for d in dates],
                     "related_item_ids": note.related_ids,
+                    "plan_mode": plan_mode,
                 },
             )
             for source_id in note.source_ids:

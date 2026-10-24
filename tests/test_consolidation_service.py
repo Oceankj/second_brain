@@ -246,3 +246,40 @@ def test_single_note_promotion_preserves_original_chinese():
     note = validate_plan(raw, [original], []).notes[0]
     assert note.title == original["title"]
     assert note.body == original["body"]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("dry_run", [True, False])
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "not json",
+        '{"notes":[{"title":"invented","body":"unsafe","source_ids":["foreign"]}]}',
+        '{"notes":[{"title":"invented","body":"unsafe","source_ids":["a"],"related_ids":["foreign"]}]}',
+        '{"notes":[{"title":"invented","body":"unsafe","source_ids":["a"]}]}',
+    ],
+)
+async def test_invalid_plan_preserves_all_originals_without_generated_links(raw, dry_run):
+    items = [source("a", "2026-08-29"), source("b", "2026-08-29")]
+    service, repo, summary, _ = setup_review(items)
+    summary.summarize.side_effect = [raw, "Daily findings", "Daily findings"]
+    result = await service.review(
+        ReviewCandidatesInput(token="t", dry_run=dry_run), user_id="user-local"
+    )
+    assert result["plan_mode"] == "verbatim_fallback"
+    assert result["status"] == ("preview" if dry_run else "accepted")
+    assert [(n["title"], n["body"]) for n in result["notes"]] == [
+        (n["title"], n["body"]) for n in items
+    ]
+    if dry_run:
+        assert repo.memory_items.created == repo.memory_items.archived == []
+    else:
+        assert repo.memory_items.archived == ["a", "b"]
+        assert not any(x["target_id"] == "foreign" for x in repo.memory_links.created)
+        events = [
+            e
+            for e in repo.memory_item_events.created
+            if e["event_type"] == "created" and e["source"] == "candidate_review"
+        ]
+        assert len(events) == 2
+        assert all(e["metadata"]["plan_mode"] == "verbatim_fallback" for e in events)

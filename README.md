@@ -201,6 +201,8 @@ the deployed server; Actions does not inherit local `.env` or Render environment
 variables. Manual runs default to preview and no longer accept a date.
 See the [Chinese setup guide](README.zh.md) for API behavior and limits.
 
+Invalid model review plans are discarded in full. Candidates are promoted individually with their original title/body and no model-proposed related links; `plan_mode=verbatim_fallback` is recorded in the response and creation events. Provider outages, source-budget errors, and concurrent changes still fail without consuming candidates.
+
 ### Model usage ledger
 
 Provider calls are recorded separately in `logs/model-usage.sqlite3` (override with

@@ -212,6 +212,8 @@ curl --fail-with-body http://127.0.0.1:8001/diary/2026-10-01 \
 3. 將 workflow 放到 default branch。先用手動 `workflow_dispatch`，保持 `dry_run=true`；正式執行時取消 dry run，或等每日排程。
 4. workflow 不再接受 `date`，因為 candidate backlog 自帶來源日期。手動單日摘要仍可呼叫 `/maintenance/daily-diary`。停用 GitHub Actions 中的 workflow 即可停止排程。
 
+模型整理計畫若格式錯誤、漏掉來源或引用未提供的 ID，會整份丟棄，改為逐筆保留原 title/body，不採用模型提出的 related links；回應與建立事件記錄 `plan_mode=verbatim_fallback`。Provider 故障、來源超出預算或並行修改仍會停止，不消耗 candidates。
+
 CI log 只顯示批次狀態，不輸出日記與來源內容。preview 會使用 embedding 搜尋及 summary provider，但不改 DB。這份設定檔不代表線上排程已啟用；本流程也不代表系統保存了所有原始對話。
 
 Remote MCP HTTP 的 `memory.json` 設定範例：
