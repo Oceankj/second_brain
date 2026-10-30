@@ -68,7 +68,7 @@ Callback 範例只是示意，實際上由 ChatGPT 提交。伺服器驗證後�
 - 僅支援 public client 的 `none`、authorization code、選用 refresh token，以及 `code` response type。
 - 省略 grants 時預設為 `authorization_code`；省略 scopes 時預設為 `memory:read memory:write`。接受的設定會存入資料庫。
 - Discovery 宣告 PKCE `S256` 與 callback issuer identification；不宣告尚未支援的 CIMD。
-- 註冊請求最大 16 KiB；每個服務程序每分鐘最多接受 60 次嘗試，超過回傳 `429`。多程序部署需另由入口服務提供共用流量限制。
+- 註冊請求最大 16 KiB；每個服務程序按來源 IP 每分鐘最多接受 60 次嘗試，超過回傳 `429`。多程序部署需另由入口服務提供共用流量限制。
 - 無效 metadata 回傳 `400`；媒體類型錯誤為 `415`；過大為 `413`；資料庫錯誤為 `503`，不回傳資料庫內部訊息。
 
 Client 註冊不會建立使用者，也不代表已取得記憶存取權；取得 token 仍需要後續的登入、授權與 PKCE 驗證。
@@ -80,3 +80,11 @@ Client 註冊不會建立使用者，也不代表已取得記憶存取權；取�
 本機端點測試：`uv run pytest tests/test_oauth_discovery.py`。涵蓋 discovery 一致性、401 challenge、註冊成功、URI 精確比對、無效 metadata、請求大小及流量限制。
 
 依據：[OpenAI Docs：MCP Authentication](https://developers.openai.com/plugins/build/auth)。資料表說明：[OAuth 資料表與授權流程](oauth-storage.md)。
+
+
+未完成授權的 client 在建立 24 小時後不能開始新授權。每次註冊會清除過期、
+未發出授權碼的 authorization requests，以及過期且不再被引用的 clients。
+已發出授權碼或具有 token family 的 client 保留，避免中斷既有連線。
+資料庫以交易鎖確保所有程序合計最多 10,000 個 clients；達到上限時新註冊回傳 503。
+此清理在註冊時執行，沒有背景排程；既有超額資料不會被強制刪除。
+來源 IP 與多程序部署的注意事項見 [登入文件](oauth-login.md)。

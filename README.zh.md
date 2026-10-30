@@ -43,7 +43,6 @@ LOCAL_POSTGRES_DB=personal_agent_memory
 LOCAL_POSTGRES_USER=postgres
 LOCAL_POSTGRES_PASSWORD=postgres
 LOCAL_POSTGRES_PORT=5432
-MEMORY_ADMIN_API_ENABLED=false
 MEMORY_DEFAULT_USER_TOKEN=replace-with-a-random-token-at-least-32-chars
 CLOUDFLARE_ACCOUNT_ID=
 CLOUDFLARE_API_TOKEN=
@@ -163,7 +162,7 @@ uv run personal-agent-memory
 uv run personal-agent-memory-http
 ```
 
-執行 `personal-agent-memory-http` 就會啟動 remote MCP、不需驗證的 `/health`，以及需要 Bearer token 的 daily diary maintenance route。`/users*` 管理 routes 由獨立的 `MEMORY_ADMIN_API_ENABLED` 控制，預設不註冊；即使開啟仍需要有效的 Bearer token。stdio MCP tools 使用 top-level `token` argument；HTTP REST routes 使用 `Authorization: Bearer <token>` 或 `X-Memory-Token` header；remote MCP 使用 `Authorization: Bearer <token>` transport auth，不需要在 tool arguments 再傳 token。Token 只以 hash 形式寫入 DB。
+執行 `personal-agent-memory-http` 就會啟動 remote MCP、不需驗證的 `/health`，以及需要 Bearer token 的 daily diary maintenance route。使用者管理只透過直接連線資料庫的 `memory-admin` CLI，不提供 `/users*` HTTP 管理 routes。stdio MCP tools 使用 top-level `token` argument；HTTP REST routes 使用 `Authorization: Bearer <token>` 或 `X-Memory-Token` header；remote MCP 使用 `Authorization: Bearer <token>` transport auth，不需要在 tool arguments 再傳 token。Token 只以 hash 形式寫入 DB。
 
 建立每日 diary：
 
@@ -246,7 +245,7 @@ Remote MCP HTTP 的 `memory.json` 設定範例：
 - `allowed_hosts` 要包含 client 實際送出的 Host header；放在 reverse proxy 後面時通常是你的公開網域。
 - `allowed_origins` 要包含瀏覽器型 MCP client 的 origin；純 server-to-server client 也建議保持收斂。
 - production 必須放在 TLS/reverse proxy/Cloudflare Access/Tailscale/SSH tunnel 這類邊界後面，並搭配 rate limit 與 access log。
-- Bearer token 使用既有 user token 規則，也就是 `MEMORY_DEFAULT_USER_TOKEN` 或 DB 裡已 seed 的 token；不要把 provider API keys 當成 MCP auth token。
+- Bearer token 使用既有 user token 規則，也就是 預設使用者目前的 `MEMORY_DEFAULT_USER_TOKEN` 或其他使用者在 DB 裡的 token；不要把 provider API keys 當成 MCP auth token。
 
 預設的 Docker Compose database URL 是：
 
@@ -347,7 +346,7 @@ server/
     http.py          deployable unified HTTP entrypoint
   adapters/
     mcp_http.py      streamable HTTP MCP adapter setup
-    rest.py          REST route handlers for health/users/maintenance
+    rest.py          REST route handlers for health/diary/maintenance
   auth/
     transport.py     MCP HTTP bearer token verifier
   tools/
@@ -473,3 +472,20 @@ POST 逾時不自動重試，因為伺服器可能已完成寫入。30 分鐘後
 
 此 workflow 呼叫已部署伺服器，不會執行本機程式或自動部署。要使用最新的工作摘要與
 分角色來源，須先部署目前程式並執行 migrations 006／007，再把 workflow 放上 default branch。
+
+
+### 認證更新與 OAuth 防濫用
+
+已移除 `GET /users`、`GET /users/{user_id}`、`PUT /users/{user_id}`、
+`PATCH /users/{user_id}`，呼叫一律回傳 404。`MEMORY_ADMIN_API_ENABLED` 與
+`MEMORY_ADMIN_API_TOKEN` 不再讀取，可從部署環境移除；重啟服務後生效。
+現有使用者、密碼與記憶資料保留。帳號管理改用直接透過 `DATABASE_URL` 連線的
+[memory-admin CLI](docs/account-management.md)。原有 HTTP 呼叫端需停用或改成 CLI
+支援的帳號操作；CLI 不提供舊 API 的任意 ID upsert 或單獨修改顯示名稱功能。
+
+預設使用者（ID `0`）只接受目前設定的 `MEMORY_DEFAULT_USER_TOKEN`：輪替或移除設定後，
+重啟所有服務程序即撤銷舊 token，不需要先使用新 token。其他使用者的 DB token 不受影響。
+這不會撤銷已發出的 OAuth access/refresh tokens；它們有獨立的生命週期。
+
+OAuth 限流與未使用 client 的到期／容量政策見 [登入文件](docs/oauth-login.md)
+與 [註冊文件](docs/oauth-discovery.md)。此次變更不需資料庫 schema migration。

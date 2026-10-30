@@ -6,8 +6,6 @@ import hmac
 import logging
 import re
 import secrets
-import time
-from collections import deque
 from html import escape
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
@@ -20,6 +18,7 @@ from starlette.routing import Route
 
 from personal_agent_memory.server.application import ApplicationContext
 from personal_agent_memory.server.auth.client_compatibility import extra_form_action_origins
+from personal_agent_memory.server.auth.rate_limit import RateLimiter, client_ip
 from personal_agent_memory.server.auth.transport import MCP_HTTP_SCOPES
 from personal_agent_memory.services.users import hash_password, hash_token, verify_password
 
@@ -130,8 +129,9 @@ class LoginHandler:
         self.resource = str(AnyHttpUrl(context.settings.oauth_resource_url))
         self.secure = context.settings.oauth_base_url.startswith('https://')
         self.cookie = '__Host-memory-oauth' if self.secure else 'memory-oauth-local'
-        self.get_attempts: deque[float] = deque()
-        self.post_attempts: deque[float] = deque()
+        self.get_attempts = RateLimiter(120)
+        self.post_attempts = RateLimiter(30)
+        self.account_attempts = RateLimiter(10)
         self.dummy_hash = hash_password(secrets.token_urlsafe(32))
 
     def set_cookie(self, response: Response, value: str) -> None:
@@ -140,14 +140,8 @@ class LoginHandler:
 
     async def handle(self, request: Request) -> Response:
         attempts = self.get_attempts if request.method == 'GET' else self.post_attempts
-        limit = 120 if request.method == 'GET' else 30
-        now = time.monotonic()
-        while attempts and attempts[0] <= now - 60:
-            attempts.popleft()
-        if len(attempts) >= limit:
-            return JSONResponse({'error': 'temporarily_unavailable'}, status_code=429,
-                                headers={**HEADERS, 'Retry-After': '60'})
-        attempts.append(now)
+        if not attempts.allow(client_ip(request)):
+            return self.rate_limited()
         try:
             return await (self.start(request) if request.method == 'GET' else self.submit(request))
         except psycopg.Error:
@@ -247,6 +241,10 @@ class LoginHandler:
         username, password = form.get('username', ''), form.get('password', '')
         if len(username) > 256 or len(password) > 1024:
             return self.form_invalid('oversized_credentials')
+        # Only validated browser flows consume an account's password-check budget.
+        # Hash the normalized name so limiter state does not retain account names.
+        if not self.account_attempts.allow(hash_token(username.lower())):
+            return self.rate_limited()
         user = await repository.users.find_login(username.lower())
         encoded = user['password_hash'] if user and user['password_hash'] else self.dummy_hash
         valid = await run_in_threadpool(verify_password, password, encoded)
@@ -262,6 +260,11 @@ class LoginHandler:
         response = callback(completed['redirect_uri'], self.context.settings.oauth_issuer_url,
                             completed['state'], code=code)
         return response
+
+    @staticmethod
+    def rate_limited() -> Response:
+        return JSONResponse({'error': 'temporarily_unavailable'}, status_code=429,
+                            headers={**HEADERS, 'Retry-After': '60'})
 
     @staticmethod
     def initial_invalid() -> Response:

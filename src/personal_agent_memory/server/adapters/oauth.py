@@ -2,8 +2,6 @@
 
 import json
 import secrets
-import time
-from collections import deque
 from urllib.parse import urlsplit
 
 import psycopg
@@ -12,9 +10,11 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
+from personal_agent_memory.repository.oauth_clients import ClientCapacityError
 from personal_agent_memory.server.adapters.oauth_login import login_routes
 from personal_agent_memory.server.adapters.oauth_token import token_routes
 from personal_agent_memory.server.application import ApplicationContext
+from personal_agent_memory.server.auth.rate_limit import RateLimiter, client_ip
 from personal_agent_memory.server.auth.transport import MCP_HTTP_SCOPES
 
 
@@ -70,7 +70,7 @@ def oauth_routes(context: ApplicationContext) -> list[Route]:
     settings = context.settings
     base = settings.oauth_base_url
     resource = str(AnyHttpUrl(settings.oauth_resource_url))
-    attempts: deque[float] = deque()
+    attempts = RateLimiter(60)
 
     async def metadata(request: Request) -> JSONResponse:
         return JSONResponse({
@@ -95,13 +95,9 @@ def oauth_routes(context: ApplicationContext) -> list[Route]:
         })
 
     async def register(request: Request) -> JSONResponse:
-        now = time.monotonic()
-        while attempts and attempts[0] <= now - 60:
-            attempts.popleft()
-        if len(attempts) >= 60:
+        if not attempts.allow(client_ip(request)):
             return JSONResponse({'error': 'temporarily_unavailable'}, status_code=429,
                                 headers={'Retry-After': '60'})
-        attempts.append(now)
         if request.headers.get('content-type', '').split(';')[0].strip() != 'application/json':
             return JSONResponse({'error': 'invalid_client_metadata'}, status_code=415)
         body = bytearray()
@@ -119,7 +115,7 @@ def oauth_routes(context: ApplicationContext) -> list[Route]:
         client['client_id'] = secrets.token_urlsafe(32)
         try:
             row = await context.repository().oauth_clients.create(client)
-        except psycopg.Error:
+        except (psycopg.Error, ClientCapacityError):
             return JSONResponse({'error': 'temporarily_unavailable'}, status_code=503)
         client['client_id_issued_at'] = int(row['created_at'].timestamp())
         return JSONResponse(client, status_code=201, headers={'Cache-Control': 'no-store'})

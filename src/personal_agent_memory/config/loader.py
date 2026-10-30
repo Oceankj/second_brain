@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any
 
 from personal_agent_memory.config.defaults import (
-    ADMIN_API_ENABLED_ENV,
     CLOUDFLARE_ACCOUNT_ID_ENV,
     CLOUDFLARE_API_TOKEN_ENV,
     DATABASE_URL_ENV,
@@ -67,7 +66,6 @@ from personal_agent_memory.config.parsing import (
     config_section,
     config_str,
     config_str_tuple,
-    parse_bool,
 )
 
 
@@ -82,7 +80,6 @@ def load_settings() -> Settings:
     return Settings(
         database_url=database_url,
         public_base_url=os.environ.get('PUBLIC_BASE_URL') or None,
-        admin_api_enabled=config_bool_from_env(ADMIN_API_ENABLED_ENV, default=False),
         default_user_token=os.environ.get(DEFAULT_USER_TOKEN_ENV),
         **load_database_settings(memory_config),
         **load_embedding_settings(memory_config),
@@ -429,11 +426,3 @@ def resolve_memory_config_path(path: Path | None = None) -> Path:
         return Path(env_path).expanduser()
 
     return Path.cwd() / "memory.json"
-
-
-def config_bool_from_env(key: str, *, default: bool) -> bool:
-    raw_value = os.environ.get(key)
-    if raw_value is None:
-        return default
-
-    return parse_bool(raw_value, name=key)

@@ -9,7 +9,6 @@ from personal_agent_memory.config import Settings
 from personal_agent_memory.server.adapters.mcp_http import create_mcp_http_server
 from personal_agent_memory.server.adapters.oauth import oauth_routes
 from personal_agent_memory.server.adapters.rest import (
-    admin_routes,
     diary_routes,
     maintenance_routes,
     public_routes,
@@ -29,8 +28,6 @@ def create_http_server(settings: Settings | None = None) -> FastMCP:
     register_rest_routes(server, public_routes)
     register_rest_routes(server, maintenance_routes)
     register_rest_routes(server, diary_routes)
-    if context.settings.admin_api_enabled:
-        register_rest_routes(server, admin_routes)
     return server
 
 

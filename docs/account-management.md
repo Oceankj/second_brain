@@ -3,7 +3,8 @@
 先執行 `uv sync` 安裝 `memory-admin`，並確保目標資料庫已套用 `002_user_login.sql`。
 CLI 讀取目前目錄的 `.env` 中的 `DATABASE_URL`；已存在的環境變數優先。
 可用 `uv run memory-admin --env-file /path/to/.env list-users` 指定檔案。
-CLI 直接以資料庫連線權限管理帳號，不需要啟動 MCP、Ollama 或 HTTP admin API。
+CLI 直接以 `DATABASE_URL` 的資料庫連線權限管理帳號，不需要啟動 MCP 或 Ollama，
+也不使用使用者 token 或 admin token。服務不再提供 `/users*` HTTP 管理 API。
 
 ```bash
 # 先設定既有 default user（id = 0）的密碼
