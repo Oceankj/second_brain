@@ -300,3 +300,39 @@ async def test_post_rate_limit(app):
             await browser.post('/oauth/authorize', data={})
         response = await browser.post('/oauth/authorize', data={})
         assert response.status_code == 429 and response.headers['retry-after'] == '60'
+
+
+@pytest.mark.anyio
+async def test_post_limit_isolates_ips_and_ignores_forwarded_headers(app):
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app, client=('192.0.2.1', 1)),
+        base_url='https://memory.test',
+    ) as attacker:
+        for _ in range(30):
+            await attacker.post('/oauth/authorize', data={})
+        response = await attacker.post('/oauth/authorize', data={},
+                                       headers={'x-forwarded-for': '192.0.2.2'})
+        assert response.status_code == 429
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app, client=('192.0.2.2', 1)),
+        base_url='https://memory.test',
+    ) as browser:
+        assert (await browser.post('/oauth/authorize', data={})).status_code == 400
+
+
+@pytest.mark.anyio
+async def test_account_limit_spans_ips_and_normalizes_username(app, repository):
+    for attempt in range(11):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app, client=(f'192.0.2.{attempt + 1}', 1)),
+            base_url='https://memory.test',
+        ) as browser:
+            page = await browser.get('/oauth/authorize', params=PARAMS)
+            form = {**form_values(page), 'decision': 'approve',
+                    'username': 'ALICE' if attempt % 2 else 'alice', 'password': 'wrong'}
+            response = await browser.post('/oauth/authorize', data=form)
+            assert response.status_code == (401 if attempt < 10 else 429)
+            if attempt == 10:
+                response = await browser.post('/oauth/authorize', data={**form, 'username': 'bob'})
+                assert response.status_code == 401
+    assert repository.users.find_login.await_count == 11

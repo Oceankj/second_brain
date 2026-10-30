@@ -124,12 +124,13 @@ async def test_authenticate_default_user_token_seeds_token_hash() -> None:
 @pytest.mark.anyio
 async def test_authenticate_existing_token_hash_returns_matching_user() -> None:
     repository = FakeRepository()
-    repository.users.token_hashes[hash_token("y" * 32)] = DEFAULT_USER_ID
+    repository.users.rows["other"] = make_user("other", "Other User")
+    repository.users.token_hashes[hash_token("y" * 32)] = "other"
     service = UserService(repository=repository)
 
     user = await service.authenticate_token("y" * 32)
 
-    assert user["id"] == DEFAULT_USER_ID
+    assert user["id"] == "other"
 
 
 @pytest.mark.anyio
@@ -163,7 +164,7 @@ async def test_user_responses_exclude_credentials() -> None:
         password_hash="private-password-hash", api_token_hash="private-token-hash"
     )
     repository.users.token_hashes[hash_token("token")] = DEFAULT_USER_ID
-    service = UserService(repository=repository)
+    service = UserService(repository=repository, default_user_token="token")
 
     responses = [
         await service.get_user(),
@@ -177,3 +178,20 @@ async def test_user_responses_exclude_credentials() -> None:
         assert "password_hash" not in response
         assert "api_token_hash" not in response
         assert "private-" not in str(response)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("new_token", ["new" * 12, None])
+async def test_default_token_rotation_or_removal_rejects_stored_old_hash(new_token):
+    repository = FakeRepository()
+    old_token = "old" * 12
+    await UserService(repository=repository, default_user_token=old_token).authenticate_token(
+        old_token
+    )
+    service = UserService(repository=repository, default_user_token=new_token)
+    with pytest.raises(AuthenticationError, match="invalid_token"):
+        await service.authenticate_token(old_token)
+    if new_token:
+        assert (await service.authenticate_token(new_token))["id"] == DEFAULT_USER_ID
+        with pytest.raises(AuthenticationError, match="invalid_token"):
+            await service.authenticate_token(old_token)

@@ -147,3 +147,56 @@ async def test_two_pages_reuse_session_and_can_finish_independently(database_rep
                 'password': 'correct private password', 'decision': 'approve',
             })
             assert response.status_code == 303
+
+
+@pytest.mark.anyio
+async def test_unused_clients_expire_and_registration_reclaims_storage(database_repository):
+    conn, repository, _ = database_repository
+    clients = repository.oauth_clients
+    await conn.execute("update oauth_clients set created_at = now() - interval '2 days'")
+    assert await clients.get('client') is None
+    await clients.create({'client_id': 'new', 'redirect_uris': ['https://test/cb'],
+                          'grant_types': ['authorization_code'], 'scope': 'memory:read'})
+    assert await clients.get('new') is not None
+    cursor = await conn.execute("select client_id from oauth_clients")
+    assert [r['client_id'] for r in await cursor.fetchall()] == ['new']
+
+
+@pytest.mark.anyio
+async def test_client_cap_and_existing_authorized_clients_survive(database_repository):
+    from personal_agent_memory.repository.oauth_clients import ClientCapacityError
+    conn, repository, _ = database_repository
+    clients = repository.oauth_clients
+    await conn.execute("""insert into oauth_token_families
+        (client_id, user_id, resource, scopes, expires_at)
+        values ('client', 'alice', 'https://memory.test/mcp', array['memory:read'],
+                now() + interval '1 day')""")
+    await conn.execute("update oauth_clients set created_at = now() - interval '2 days'")
+    assert await clients.get('client') is not None
+    clients.MAX_CLIENTS = 1
+    with pytest.raises(ClientCapacityError):
+        await clients.create({'client_id': 'new', 'redirect_uris': ['https://test/cb'],
+                              'grant_types': ['authorization_code'], 'scope': 'memory:read'})
+    assert await clients.get('client') is not None
+    assert await clients.get('new') is None
+
+
+@pytest.mark.anyio
+async def test_expired_abandoned_authorization_does_not_pin_client(database_repository):
+    conn, repository, _ = database_repository
+    context = ApplicationContext(Settings(database_url='postgresql://example',
+                                          public_base_url='https://memory.test'))
+    context._repository = repository
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(
+        app=Starlette(routes=login_routes(context))), base_url='https://memory.test',
+    ) as browser:
+        assert (await browser.get('/oauth/authorize', params=PARAMS)).status_code == 200
+    await conn.execute("update oauth_clients set created_at = now() - interval '2 days'")
+    await conn.execute("""update oauth_authorization_requests
+        set created_at = now() - interval '1 hour', expires_at = now() - interval '1 minute'""")
+    await repository.oauth_clients.create({
+        'client_id': 'new', 'redirect_uris': ['https://test/cb'],
+        'grant_types': ['authorization_code'], 'scope': 'memory:read',
+    })
+    cursor = await conn.execute('select client_id from oauth_clients')
+    assert [r['client_id'] for r in await cursor.fetchall()] == ['new']

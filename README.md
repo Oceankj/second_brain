@@ -232,3 +232,37 @@ stops starting batches after 30 minutes (45-minute job limit).
 The Action calls the deployed `/maintenance/review-candidates` endpoint; it does not
 run the local Python implementation or deploy it. Deploy current code and migrations
 006/007 first to use selective work summaries and the new source schema.
+
+
+### Authentication upgrade
+
+HTTP user-management routes (`GET /users`, `GET /users/{user_id}`,
+`PUT /users/{user_id}`, and `PATCH /users/{user_id}`) have been removed and return
+404. `MEMORY_ADMIN_API_ENABLED` and `MEMORY_ADMIN_API_TOKEN` are no longer read;
+remove them from deployment settings. Manage accounts with the
+[`memory-admin` CLI](docs/account-management.md), which connects directly using
+`DATABASE_URL`. Existing users, passwords, and memory data are preserved.
+Scripts calling the removed endpoints must be retired or updated to use the
+CLI's supported account operations; the CLI is not a one-for-one replacement
+for the old arbitrary-ID upsert or display-name update endpoints.
+
+User `0` accepts only the current `MEMORY_DEFAULT_USER_TOKEN`. After rotating or
+removing that setting, restart every server process: the old stored hash is
+rejected immediately, without first using the new token. Other users' database
+tokens are unchanged. Already issued OAuth tokens have a separate lifecycle.
+No database schema migration is required for this update.
+
+OAuth login limits now apply per source IP (120 GETs/30 POSTs per minute) and
+per normalized account (10 password checks per minute after browser-state
+validation). Registration allows 60 attempts per IP per minute. These windows
+are process-local; configure trusted proxy IPs in the ASGI server and shared
+edge limits for multi-worker deployments. Forwarding headers are not trusted by
+the application itself. Each limiter retains at most 10,000 active keys and
+rejects new keys at capacity until old windows expire.
+
+Unapproved OAuth clients expire after 24 hours. Registration reclaims expired,
+unreferenced clients and expired authorization requests without issued codes.
+Clients with authorization codes or token families are retained to preserve
+existing connections. A transaction-serialized database cap of 10,000 clients
+bounds registration storage across workers; capacity exhaustion returns 503.
+Expired rows are cleaned lazily on registration, not by a background timer.

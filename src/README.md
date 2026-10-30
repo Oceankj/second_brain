@@ -309,7 +309,7 @@ Good responsibilities:
 
 - Resolve missing user IDs to the default user `0`.
 - Ensure a user exists before memory writes.
-- Serialize users for REST responses.
+- Serialize user data without exposing credentials.
 
 Avoid:
 

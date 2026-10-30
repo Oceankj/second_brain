@@ -97,7 +97,9 @@ Session 與 request ID 都是安全亂數，資料庫只保存 hash。CSRF token
 
 ## 請求限制與測試
 
-授權網址 query 最大 8 KiB；表單最大 16 KiB。每個服務程序每分鐘最多接受 120 次 GET、30 次 POST，超過回傳 `429`。這是程序內共用限制；多程序部署仍需由入口服務提供共用流量限制。
+授權網址 query 最大 8 KiB；表單最大 16 KiB。每個服務程序按來源 IP 每分鐘最多接受 120 次 GET、30 次 POST；通過瀏覽器狀態驗證後，每個正規化帳號每分鐘最多進行 10 次密碼檢查，超過回傳 `429`，被拒絕的嘗試不延長視窗。不同 IP 不共用單一額度。帳號限制也適用不存在的帳號。
+
+應用程式使用 ASGI 的來源 IP，不直接信任 `X-Forwarded-For`；反向代理需在 ASGI server 設定可信 proxy IP，否則可能把所有使用者視為同一來源。多程序部署仍需由入口服務提供共用流量限制。每個 limiter 最多保留 10,000 個活躍 key，過期自動移除，滿載時拒絕新 key。
 
 頁面與 callback 都使用 `Cache-Control: no-store`、`Referrer-Policy: no-referrer`，並禁止 iframe 嵌入。Client 名稱與其他顯示文字均經 HTML escaping；錯誤回應不包含密碼、hash 或資料庫內部訊息。
 

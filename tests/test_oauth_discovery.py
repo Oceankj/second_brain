@@ -126,3 +126,32 @@ def test_loopback_redirect_and_invalid_public_origin():
                    'https://example.com?query=1', 'https://user:pass@example.com']:
         with pytest.raises(ValueError):
             Settings(database_url='postgresql://example', public_base_url=origin)
+
+
+@pytest.mark.anyio
+async def test_registration_limit_isolates_ips(app_and_repository):
+    app, _ = app_and_repository
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app, client=('192.0.2.1', 1)),
+        base_url='http://localhost',
+    ) as attacker:
+        for _ in range(60):
+            await attacker.post('/oauth/register', json={})
+        assert (await attacker.post('/oauth/register', json={})).status_code == 429
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app, client=('192.0.2.2', 1)),
+        base_url='http://localhost',
+    ) as client:
+        response = await client.post('/oauth/register', json={'redirect_uris': ['https://test/cb']})
+        assert response.status_code == 201
+
+
+@pytest.mark.anyio
+async def test_registration_capacity_returns_503(app_and_repository):
+    from personal_agent_memory.repository.oauth_clients import ClientCapacityError
+    app, repository = app_and_repository
+    repository.create.side_effect = ClientCapacityError()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                 base_url='http://localhost') as client:
+        response = await client.post('/oauth/register', json={'redirect_uris': ['https://test/cb']})
+        assert response.status_code == 503

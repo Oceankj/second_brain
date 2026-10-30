@@ -45,11 +45,20 @@ class UserService:
         token_hash = hash_token(token)
         user = await self.repository.users.find_by_token_hash(token_hash)
         if user:
+            # User zero's credential is controlled exclusively by current configuration.
+            # Reject stale hashes even when the setting has been removed entirely.
+            if user["id"] == DEFAULT_USER_ID and (
+                not self.default_user_token
+                or not hmac.compare_digest(token.encode(), self.default_user_token.encode())
+            ):
+                raise AuthenticationError("invalid_token")
             if not user.get("is_active", True):
                 raise AuthenticationError("invalid_token")
             return serialize_user(user)
 
-        if self.default_user_token and hmac.compare_digest(token, self.default_user_token):
+        if self.default_user_token and hmac.compare_digest(
+            token.encode(), self.default_user_token.encode()
+        ):
             existing_user = await self.repository.users.get(DEFAULT_USER_ID)
             if existing_user and not existing_user.get("is_active", True):
                 raise AuthenticationError("invalid_token")
