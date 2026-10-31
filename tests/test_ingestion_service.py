@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Any
 
@@ -146,6 +147,23 @@ class FakeRepository:
         self.memory_links = FakeMemoryLinks()
         self.memory_item_events = FakeMemoryItemEvents()
 
+    @asynccontextmanager
+    async def transaction(self):
+        snapshot = (
+            len(self.memory_items.created),
+            len(self.memory_chunks.created),
+            len(self.memory_links.created),
+            len(self.memory_item_events.created),
+        )
+        try:
+            yield None
+        except Exception:
+            del self.memory_items.created[snapshot[0] :]
+            del self.memory_chunks.created[snapshot[1] :]
+            del self.memory_links.created[snapshot[2] :]
+            del self.memory_item_events.created[snapshot[3] :]
+            raise
+
 
 def make_payload() -> IngestTurnInput:
     return IngestTurnInput(
@@ -197,3 +215,56 @@ async def test_ingest_turn_logs_linked_from_new_note_event_for_created_wikilink(
         "link_type": "references",
         "target_title": "Existing Note",
     }
+
+
+class FailingEmbeddingProvider:
+    async def embed_text(self, text: str) -> list[float]:
+        raise RuntimeError("embedding provider unavailable")
+
+
+class FailingEvents(FakeMemoryItemEvents):
+    async def create(self, **kwargs: Any) -> dict[str, Any]:
+        raise RuntimeError("event write failed")
+
+
+@pytest.mark.anyio
+async def test_ingest_turn_writes_nothing_when_embedding_provider_fails() -> None:
+    repository = FakeRepository()
+    service = IngestionService(
+        repository=repository,
+        embedding_provider=FailingEmbeddingProvider(),
+        max_chunk_chars=1000,
+        chunk_overlap_chars=100,
+    )
+
+    with pytest.raises(RuntimeError, match="embedding provider unavailable"):
+        await service.ingest_turn(make_payload(), user_id="0")
+
+    # Regression test for issue #4: the old code created the memory_items
+    # row before embedding, so a provider failure left a partial candidate
+    # behind. Embeddings are now prepared before any write, so nothing is
+    # written at all and a retry redoes the whole turn.
+    assert repository.memory_items.created == []
+    assert repository.memory_chunks.created == []
+    assert repository.memory_item_events.created == []
+    assert repository.memory_links.created == []
+
+
+@pytest.mark.anyio
+async def test_ingest_turn_rolls_back_when_a_write_inside_the_transaction_fails() -> None:
+    repository = FakeRepository()
+    repository.memory_item_events = FailingEvents()
+    service = IngestionService(
+        repository=repository,
+        embedding_provider=FakeEmbeddingProvider(),
+        max_chunk_chars=1000,
+        chunk_overlap_chars=100,
+    )
+
+    with pytest.raises(RuntimeError, match="event write failed"):
+        await service.ingest_turn(make_payload(), user_id="0")
+
+    assert repository.memory_items.created == []
+    assert repository.memory_chunks.created == []
+    assert repository.memory_item_events.created == []
+    assert repository.memory_links.created == []

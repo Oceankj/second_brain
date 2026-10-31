@@ -7,7 +7,7 @@ from personal_agent_memory.contracts import IngestReason, MemoryItemType
 from personal_agent_memory.contracts.memory import IngestTurnData
 from personal_agent_memory.providers.embeddings import EmbeddingProvider
 from personal_agent_memory.repository import PostgresMemoryRepository
-from personal_agent_memory.services.memory.chunking import chunk_text
+from personal_agent_memory.services.memory.chunking import TextChunk, chunk_text
 from personal_agent_memory.services.memory.ingest_policy import evaluate_ingest_policy
 from personal_agent_memory.utils.serialization import (
     serialize_event,
@@ -68,45 +68,65 @@ class IngestionService:
     async def ingest_turn(self, payload: IngestTurnData, *, user_id: str) -> dict[str, Any]:
         evaluate_ingest_policy(payload.metadata)
 
+        # Prepare phase: provider calls only, no database writes. If an
+        # embedding provider fails here, nothing has been written yet, so a
+        # retry redoes the whole turn instead of duplicating a partial row.
+        # This intentionally keeps all prepared embeddings in memory; see the
+        # issue #4 discussion for why staging/resume was not added.
+        prepared = []
+        for candidate in extract_memory_candidates(payload):
+            prepared.append(
+                (
+                    candidate,
+                    await self._prepare_chunks(candidate.body),
+                    await self._prepare_tags(candidate.tags),
+                )
+            )
+
+        # Write phase: a single transaction per ingest_turn call. The
+        # repository binds every call inside this block to one connection,
+        # so a failure here rolls back the item, chunks, tags, event and
+        # links together instead of leaving a partial candidate behind.
         candidate_items = []
         all_tags = []
         all_links = []
         all_events = []
 
-        for candidate in extract_memory_candidates(payload):
-            item = await self.repository.memory_items.create(
-                user_id=user_id,
-                item_type=candidate.item_type,
-                ingest_reason=candidate.reason,
-                title=candidate.title,
-                body=candidate.body,
-                status="candidate",
-                record_kind="source", role="mixed", source=payload.metadata.source,
-                session_id=payload.metadata.session_id,
-                source_timestamp=payload.metadata.timestamp,
-            )
+        async with self.repository.transaction():
+            for candidate, prepared_chunks, prepared_tags in prepared:
+                item = await self.repository.memory_items.create(
+                    user_id=user_id,
+                    item_type=candidate.item_type,
+                    ingest_reason=candidate.reason,
+                    title=candidate.title,
+                    body=candidate.body,
+                    status="candidate",
+                    record_kind="source", role="mixed", source=payload.metadata.source,
+                    session_id=payload.metadata.session_id,
+                    source_timestamp=payload.metadata.timestamp,
+                )
 
-            await self._create_chunks(item["id"], candidate.body)
-            tags = await self._attach_tags(item["id"], candidate.tags)
-            created_event = await self.repository.memory_item_events.create(
-                memory_item_id=item["id"],
-                event_type="created",
-                source=payload.metadata.source,
-                session_id=payload.metadata.session_id,
-                metadata=created_event_metadata(payload, candidate),
-            )
-            link_result = await self._create_wikilinks(
-                source_item_id=item["id"],
-                user_id=user_id,
-                body=candidate.body,
-                payload=payload,
-            )
+                await self._save_chunks(item["id"], prepared_chunks)
+                tags = await self._save_tags(item["id"], prepared_tags)
+                created_event = await self.repository.memory_item_events.create(
+                    memory_item_id=item["id"],
+                    event_type="created",
+                    source=payload.metadata.source,
+                    session_id=payload.metadata.session_id,
+                    metadata=created_event_metadata(payload, candidate),
+                )
+                link_result = await self._create_wikilinks(
+                    source_item_id=item["id"],
+                    user_id=user_id,
+                    body=candidate.body,
+                    payload=payload,
+                )
 
-            candidate_items.append(serialize_item(item, tags=tags))
-            all_tags.extend(tags)
-            all_links.extend(link_result.links)
-            all_events.append(serialize_event(created_event))
-            all_events.extend(link_result.events)
+                candidate_items.append(serialize_item(item, tags=tags))
+                all_tags.extend(tags)
+                all_links.extend(link_result.links)
+                all_events.append(serialize_event(created_event))
+                all_events.extend(link_result.events)
 
         return {
             "status": "accepted",
@@ -116,9 +136,22 @@ class IngestionService:
             "events": all_events,
         }
 
-    async def _create_chunks(self, memory_item_id: str, body: str) -> None:
-        for chunk in chunk_text(body, self.max_chunk_chars, self.chunk_overlap_chars):
-            embedding = await self.embedding_provider.embed_text(chunk.content)
+    async def _prepare_chunks(self, body: str) -> list[tuple[TextChunk, list[float]]]:
+        return [
+            (chunk, await self.embedding_provider.embed_text(chunk.content))
+            for chunk in chunk_text(body, self.max_chunk_chars, self.chunk_overlap_chars)
+        ]
+
+    async def _prepare_tags(self, raw_tags: list[str]) -> list[tuple[str, list[float]]]:
+        return [
+            (tag_name, await self.embedding_provider.embed_text(tag_name))
+            for tag_name in normalize_tags(raw_tags)
+        ]
+
+    async def _save_chunks(
+        self, memory_item_id: str, prepared_chunks: list[tuple[TextChunk, list[float]]]
+    ) -> None:
+        for chunk, embedding in prepared_chunks:
             await self.repository.memory_chunks.create(
                 memory_item_id=memory_item_id,
                 chunk_index=chunk.chunk_index,
@@ -127,10 +160,11 @@ class IngestionService:
                 token_count=chunk.token_count,
             )
 
-    async def _attach_tags(self, memory_item_id: str, raw_tags: list[str]) -> list[dict[str, Any]]:
+    async def _save_tags(
+        self, memory_item_id: str, prepared_tags: list[tuple[str, list[float]]]
+    ) -> list[dict[str, Any]]:
         tags = []
-        for tag_name in normalize_tags(raw_tags):
-            embedding = await self.embedding_provider.embed_text(tag_name)
+        for tag_name, embedding in prepared_tags:
             tag = await self.repository.tags.upsert(tag_name, embedding=embedding)
             await self.repository.memory_item_tags.attach(memory_item_id, tag["id"])
             tags.append(serialize_tag(tag))
