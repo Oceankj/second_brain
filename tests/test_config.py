@@ -369,6 +369,15 @@ def test_settings_rejects_invalid_chunk_overlap() -> None:
         )
 
 
+def test_settings_rejects_chunk_overlap_above_half_of_max_chars() -> None:
+    with pytest.raises(ValueError, match="must not exceed half"):
+        Settings(
+            database_url="postgresql://example",
+            max_chunk_chars=100,
+            chunk_overlap_chars=60,
+        )
+
+
 def test_settings_rejects_invalid_database_pool_size() -> None:
     with pytest.raises(ValueError, match="database_pool_min_size"):
         Settings(

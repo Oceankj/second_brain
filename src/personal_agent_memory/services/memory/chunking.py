@@ -20,6 +20,8 @@ def chunk_text(text: str, max_chars: int = 1800, overlap_chars: int = 200) -> li
         raise ValueError("overlap_chars cannot be negative")
     if overlap_chars >= max_chars:
         raise ValueError("overlap_chars must be smaller than max_chars")
+    if overlap_chars > max_chars // 2:
+        raise ValueError("overlap_chars must not exceed half of max_chars")
 
     chunks: list[TextChunk] = []
     start = 0
