@@ -361,11 +361,20 @@ def test_settings_rejects_short_default_user_token() -> None:
 
 
 def test_settings_rejects_invalid_chunk_overlap() -> None:
-    with pytest.raises(ValueError, match="overlap_chars must be smaller"):
+    with pytest.raises(ValueError, match="must not exceed half"):
         Settings(
             database_url="postgresql://example",
             max_chunk_chars=100,
             chunk_overlap_chars=100,
+        )
+
+
+def test_settings_rejects_chunk_overlap_above_half_of_max_chars() -> None:
+    with pytest.raises(ValueError, match="must not exceed half"):
+        Settings(
+            database_url="postgresql://example",
+            max_chunk_chars=100,
+            chunk_overlap_chars=60,
         )
 
 
