@@ -162,8 +162,8 @@ class Settings:
             raise ValueError("default_user_token must be at least 32 characters")
         if self.chunk_overlap_chars < 0:
             raise ValueError("chunk_overlap_chars cannot be negative")
-        if self.chunk_overlap_chars >= self.max_chunk_chars:
-            raise ValueError("chunk_overlap_chars must be smaller than max_chunk_chars")
+        if self.chunk_overlap_chars > self.max_chunk_chars // 2:
+            raise ValueError("chunk_overlap_chars must not exceed half of max_chunk_chars")
 
     def _validate_retrieval(self) -> None:
         if not 0 <= self.recent_diary_lookback_days <= 7:
