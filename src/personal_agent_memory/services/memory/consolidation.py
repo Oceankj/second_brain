@@ -42,6 +42,92 @@ class ReviewPlan(BaseModel):
     notes: list[ReviewedNote] = Field(min_length=1, max_length=50)
 
 
+class VerbatimReviewedNote(BaseModel):
+    """A note promoted verbatim, without the model-output body limit.
+
+    The 24000-character limit on ``ReviewedNote.body`` guards model-generated
+    output. A verbatim fallback copies text that is already stored (the
+    ``memory_items.body`` column is plain text with no length limit), so
+    applying that limit to the fallback would make the lossless path fail on
+    exactly the oversized bodies it exists to preserve. All other fields are
+    validated the same way as ``ReviewedNote``.
+    """
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    title: str = Field(min_length=1, max_length=300)
+    body: str = Field(min_length=1)
+    source_ids: list[str] = Field(min_length=1, max_length=50)
+    related_ids: list[str] = Field(default_factory=list, max_length=20)
+
+
+# Reply-context ranking: relevance (best stored chunk cosine similarity,
+# normalized to [0, 1]) times a distance decay that plateaus, so distance
+# never drowns relevance out on a long chain. A direct parent scores 1.0, a
+# fifth-level ancestor 0.9**5, and anything deeper scores the same as the
+# fifth level: beyond that point only relevance distinguishes ancestors.
+REPLY_CONTEXT_DECAY = 0.9
+REPLY_CONTEXT_DEPTH_CAP = 5
+
+
+def reply_context_weight(depth: int) -> float:
+    return REPLY_CONTEXT_DECAY ** min(max(depth, 0), REPLY_CONTEXT_DEPTH_CAP)
+
+
+def reply_context_score(similarity: float, depth: int) -> float:
+    return (similarity + 1) / 2 * reply_context_weight(depth)
+
+
+def select_reply_context(
+    reply_context: list[dict],
+    *,
+    candidates: list[dict],
+    related: list[dict],
+    source_max_chars: int,
+    similarity_by_id: dict[str, float],
+) -> tuple[list[dict], list[dict]]:
+    """Rank reply context by relevance times capped distance decay, then
+    fill the prompt budget in that order, keeping whole items only.
+
+    Returns ``(selected, dropped)`` with dropped in original order, so the
+    caller can record exactly what was left out. Items with no stored chunk
+    similarity score as 0 and fall back to distance order via the tie-break.
+    """
+    full_prompt = json.dumps(
+        {
+            "candidates": [evidence(x) for x in candidates],
+            "related_notes": [evidence(x) for x in related],
+            "reply_context": [evidence(x) for x in reply_context],
+        },
+        ensure_ascii=False,
+    )
+    if len(full_prompt) <= source_max_chars:
+        return list(reply_context), []
+
+    def sort_key(entry: tuple[int, dict]) -> tuple[float, int, int]:
+        index, item = entry
+        depth = item.get("reply_depth", index + 1)
+        similarity = similarity_by_id.get(item["id"], 0.0)
+        return (-reply_context_score(similarity, depth), depth, index)
+
+    ranked = [item for _, item in sorted(enumerate(reply_context), key=sort_key)]
+    selected: list[dict] = []
+    for item in ranked:
+        trial = [*selected, item]
+        trial_prompt = json.dumps(
+            {
+                "candidates": [evidence(x) for x in candidates],
+                "related_notes": [evidence(x) for x in related],
+                "reply_context": [evidence(x) for x in trial],
+            },
+            ensure_ascii=False,
+        )
+        if len(trial_prompt) <= source_max_chars:
+            selected = trial
+    selected_ids = {item["id"] for item in selected}
+    dropped = [item for item in reply_context if item["id"] not in selected_ids]
+    return selected, dropped
+
+
 REVIEW_PROMPT = """Organize candidate notes into durable notes. Return ONLY valid JSON:
 {"notes":[{"title":"...","body":"...","source_ids":["candidate id"],"related_ids":[]}]}
 Input is a JSON object with candidates and related_notes arrays. Empty related_notes is valid.
@@ -192,27 +278,68 @@ class CandidateReviewService:
             },
             ensure_ascii=False,
         )
+        dropped_reply_context: list[dict] = []
         if len(prompt) > self.diary.source_max_chars:
-            raise InvalidReview("Candidates and reply context exceed source budget")
+            # Reply context is read-only background, not candidate evidence, so
+            # it is ranked and trimmed to fit instead of blocking the review.
+            # Stored chunk similarities are used, so this costs no provider
+            # calls; repositories without the lookup fall back to distance
+            # order via the default similarity of 0.
+            similarity_method = getattr(
+                repo.memory_chunks, "max_similarity_by_item", None
+            )
+            similarity_by_id = (
+                await similarity_method(
+                    candidate_ids=[item["id"] for item in selected],
+                    ancestor_ids=[item["id"] for item in reply_context],
+                )
+                if callable(similarity_method)
+                else {}
+            )
+            reply_context, dropped_reply_context = select_reply_context(
+                reply_context,
+                candidates=selected,
+                related=related,
+                source_max_chars=self.diary.source_max_chars,
+                similarity_by_id=similarity_by_id,
+            )
+            prompt = json.dumps(
+                {
+                    "candidates": [evidence(x) for x in selected],
+                    "related_notes": [evidence(x) for x in related],
+                    "reply_context": [evidence(x) for x in reply_context],
+                },
+                ensure_ascii=False,
+            )
         plan_mode = "model_validated"
         fallback_reason = None
-        try:
-            with usage_stage("candidate_plan"):
-                raw = await self.diary.summary_provider_factory().summarize(
-                    system_prompt=REVIEW_PROMPT,
-                    user_prompt=prompt,
-                )
-            plan = validate_plan(raw, selected, related)
-        except InvalidReview:
-            fallback_reason = "invalid_model_plan"
-        except (RuntimeError, TimeoutError, OSError):
-            fallback_reason = "summary_unavailable"
+        if len(prompt) > self.diary.source_max_chars:
+            # Even with all reply context dropped, the candidates alone exceed
+            # the budget. No model call is needed to promote them verbatim, so
+            # fall back instead of failing the whole batch at its head.
+            fallback_reason = "source_budget_exceeded"
+        else:
+            try:
+                with usage_stage("candidate_plan"):
+                    raw = await self.diary.summary_provider_factory().summarize(
+                        system_prompt=REVIEW_PROMPT,
+                        user_prompt=prompt,
+                    )
+                plan = validate_plan(raw, selected, related)
+            except InvalidReview:
+                fallback_reason = "invalid_model_plan"
+            except (RuntimeError, TimeoutError, OSError):
+                fallback_reason = "summary_unavailable"
         if fallback_reason:
             # Reject all generated content and proposed links. Summary availability
             # must not block lossless promotion; embeddings and DB writes still fail closed.
-            plan = ReviewPlan(
+            # Verbatim notes are built with their own model so an oversized
+            # candidate body is not blocked by the model-output limit.
+            plan = ReviewPlan.model_construct(
                 notes=[
-                    ReviewedNote(title=item["title"], body=item["body"], source_ids=[item["id"]])
+                    VerbatimReviewedNote(
+                        title=item["title"], body=item["body"], source_ids=[item["id"]]
+                    )
                     for item in selected
                 ]
             )
@@ -258,6 +385,8 @@ class CandidateReviewService:
             "candidate_ids": selected_ids,
             "plan_mode": plan_mode,
             "plan_fallback_reason": fallback_reason,
+            "reply_context_dropped": len(dropped_reply_context),
+            "reply_context_dropped_ids": [item["id"] for item in dropped_reply_context],
             "has_more": len(candidates) > len(selected),
             "notes": [note.model_dump() for note in plan.notes],
             "diaries": [

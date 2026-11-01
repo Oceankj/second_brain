@@ -15,10 +15,16 @@ from test_daily_diary_service import (
 )
 
 from personal_agent_memory.contracts.memory import ReviewCandidatesInput
+from personal_agent_memory.repository.consolidation import ConsolidationRepository
 from personal_agent_memory.services.memory.consolidation import (
+    REVIEW_PROMPT,
     CandidateReviewService,
     InvalidReview,
     ReviewConflict,
+    evidence,
+    reply_context_score,
+    reply_context_weight,
+    select_reply_context,
     validate_plan,
 )
 
@@ -296,3 +302,190 @@ async def test_invalid_plan_preserves_all_originals_without_generated_links(raw,
         ]
         assert len(events) == 2
         assert all(e["metadata"]["plan_mode"] == "verbatim_fallback" for e in events)
+
+
+def test_reply_context_weight_plateaus_at_depth_cap() -> None:
+    assert reply_context_weight(0) == 1.0
+    assert reply_context_weight(1) == 0.9
+    assert reply_context_weight(5) == 0.9**5
+    assert reply_context_weight(6) == reply_context_weight(5)
+    assert reply_context_weight(20) == reply_context_weight(5)
+    assert reply_context_score(1.0, 20) == reply_context_score(1.0, 5)
+
+
+def _context_item(item_id: str, depth: int, body: str) -> dict:
+    return {
+        "id": item_id,
+        "title": item_id,
+        "body": body,
+        "reply_depth": depth,
+    }
+
+
+def test_select_reply_context_ranks_relevant_far_over_irrelevant_near() -> None:
+    candidate = source("cand", "2026-08-29")
+    near = _context_item("near", 1, "n" * 100)
+    far = _context_item("far", 10, "f" * 100)
+    # Budget fits exactly one ancestor: far alone fits, both together do not.
+    budget = len(
+        json.dumps(
+            {
+                "candidates": [evidence(candidate)],
+                "related_notes": [],
+                "reply_context": [evidence(far)],
+            },
+            ensure_ascii=False,
+        )
+    )
+    selected, dropped = select_reply_context(
+        [near, far],
+        candidates=[candidate],
+        related=[],
+        source_max_chars=budget,
+        similarity_by_id={"near": 0.0, "far": 1.0},
+    )
+    assert [item["id"] for item in selected] == ["far"]
+    assert [item["id"] for item in dropped] == ["near"]
+
+
+def test_select_reply_context_keeps_all_when_within_budget() -> None:
+    candidate = source("cand", "2026-08-29")
+    context = [_context_item("a", 1, "a" * 50), _context_item("b", 2, "b" * 50)]
+    selected, dropped = select_reply_context(
+        context,
+        candidates=[candidate],
+        related=[],
+        source_max_chars=24000,
+        similarity_by_id={"a": 0.5, "b": 0.5},
+    )
+    assert selected == context
+    assert dropped == []
+
+
+class _FakeCursor:
+    def __init__(self, rows: list[dict]) -> None:
+        self._rows = rows
+
+    async def fetchall(self) -> list[dict]:
+        return self._rows
+
+
+class _FakeConnection:
+    def __init__(self, parents: dict[str, str]) -> None:
+        self._parents = parents
+
+    async def __aenter__(self) -> _FakeConnection:
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        return None
+
+    async def execute(self, sql: str, params: tuple) -> _FakeCursor:
+        frontier = params[0]
+        rows = [
+            {"id": self._parents[item_id], "title": self._parents[item_id], "body": "x"}
+            for item_id in frontier
+            if item_id in self._parents
+        ]
+        return _FakeCursor(rows)
+
+
+@pytest.mark.anyio
+async def test_reply_context_has_no_50_limit_and_reports_depth() -> None:
+    from contextlib import asynccontextmanager
+
+    parents = {f"p{i}": f"p{i + 1}" for i in range(60)}
+    parents["cand"] = "p0"
+
+    @asynccontextmanager
+    async def connect():
+        yield _FakeConnection(parents)
+
+    repository = ConsolidationRepository(connect)  # type: ignore[arg-type]
+    result = await repository.reply_context(user_id="user-local", item_ids=["cand"])
+    assert len(result) == 61
+    assert result[0]["id"] == "p0" and result[0]["reply_depth"] == 1
+    assert result[-1]["id"] == "p60" and result[-1]["reply_depth"] == 61
+
+
+@pytest.mark.anyio
+async def test_review_trims_reply_context_by_weighted_rank() -> None:
+    candidate = source("cand", "2026-08-29")
+    candidate["source_message_id"] = "msg-cand"
+    candidate["body"] = "Short candidate body."
+    candidate["title"] = "Cand"
+    candidate["reply_to_ids"] = []
+    near = _context_item("near", 1, "NEAR " + "n" * 95)
+    far = _context_item("far", 10, "FAR! " + "f" * 95)
+    near["reply_to_ids"] = []
+    far["reply_to_ids"] = []
+    service, repo, summary, _ = setup_review([candidate])
+    repo.consolidation.reply_context = AsyncMock(return_value=[near, far])
+    repo.memory_chunks.max_similarity_by_item = AsyncMock(
+        return_value={"near": 0.0, "far": 1.0}
+    )
+    # Budget fits the candidate plus exactly one ancestor.
+    service.diary.source_max_chars = len(
+        json.dumps(
+            {
+                "candidates": [evidence(candidate)],
+                "related_notes": [],
+                "reply_context": [evidence(far)],
+            },
+            ensure_ascii=False,
+        )
+    )
+    result = await service.review(
+        ReviewCandidatesInput(token="t", dry_run=True), user_id="user-local"
+    )
+    assert result["plan_mode"] == "model_validated"
+    assert result["reply_context_dropped"] == 1
+    assert result["reply_context_dropped_ids"] == ["near"]
+    plan_prompt = summary.summarize.await_args_list[0].kwargs["user_prompt"]
+    assert "FAR! " in plan_prompt
+    assert "NEAR " not in plan_prompt
+
+
+@pytest.mark.anyio
+async def test_review_falls_back_when_prompt_still_over_budget() -> None:
+    candidate = source("cand", "2026-08-29")
+    candidate["body"] = "Short candidate body."
+    candidate["title"] = "Cand"
+    service, repo, summary, _ = setup_review([candidate])
+    empty_prompt = json.dumps(
+        {
+            "candidates": [evidence(candidate)],
+            "related_notes": [],
+            "reply_context": [],
+        },
+        ensure_ascii=False,
+    )
+    proposal = json.dumps([evidence(candidate)], ensure_ascii=False)
+    assert len(proposal) < len(empty_prompt)
+    service.diary.source_max_chars = len(empty_prompt) - 1
+    result = await service.review(
+        ReviewCandidatesInput(token="t", dry_run=True), user_id="user-local"
+    )
+    assert result["plan_mode"] == "verbatim_fallback"
+    assert result["plan_fallback_reason"] == "source_budget_exceeded"
+    assert result["notes"][0]["body"] == "Short candidate body."
+    assert not any(
+        call.kwargs.get("system_prompt") == REVIEW_PROMPT
+        for call in summary.summarize.await_args_list
+    )
+
+
+@pytest.mark.anyio
+async def test_review_verbatim_fallback_preserves_oversized_body() -> None:
+    candidate = source("big", "2026-08-29")
+    candidate["body"] = "x" * 30000
+    candidate["title"] = "Big Note"
+    service, repo, summary, _ = setup_review([candidate])
+    service.diary.source_max_chars = 50000
+    summary.summarize.side_effect = [RuntimeError("provider down"), "Daily findings"]
+    result = await service.review(
+        ReviewCandidatesInput(token="t", dry_run=True), user_id="user-local"
+    )
+    assert result["plan_mode"] == "verbatim_fallback"
+    assert result["plan_fallback_reason"] == "summary_unavailable"
+    assert result["notes"][0]["body"] == "x" * 30000
