@@ -86,6 +86,36 @@ class MemoryChunksRepository:
             )
             return [dict(row) for row in await cursor.fetchall()]
 
+    async def max_similarity_by_item(
+        self,
+        *,
+        candidate_ids: list[str],
+        ancestor_ids: list[str],
+    ) -> dict[str, float]:
+        """Best chunk cosine similarity from any candidate to each ancestor.
+
+        Uses the chunk embeddings already stored at ingestion time, so no
+        provider call is needed. Archived ancestors are included on purpose:
+        reply context deliberately covers archived sources, and the existing
+        chunk search filters them out.
+        """
+        if not candidate_ids or not ancestor_ids:
+            return {}
+        async with self._connect() as conn:
+            cursor = await conn.execute(
+                """
+                select
+                  anc.memory_item_id::text as item_id,
+                  max(1 - (anc.embedding <=> cand.embedding)) as score
+                from memory_chunks anc, memory_chunks cand
+                where anc.memory_item_id::text = any(%s)
+                  and cand.memory_item_id::text = any(%s)
+                group by anc.memory_item_id
+                """,
+                (ancestor_ids, candidate_ids),
+            )
+            return {row["item_id"]: float(row["score"]) for row in await cursor.fetchall()}
+
     async def search_recent_diary(
         self,
         *,
