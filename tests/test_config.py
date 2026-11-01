@@ -417,3 +417,24 @@ def test_settings_rejects_invalid_link_expansion_weight() -> None:
             database_url="postgresql://example",
             link_expansion_source_weight=1.1,
         )
+
+
+def test_settings_rejects_invalid_reply_context_decay() -> None:
+    with pytest.raises(ValueError, match="reply_context_decay"):
+        Settings(
+            database_url="postgresql://example",
+            reply_context_decay=0.0,
+        )
+    with pytest.raises(ValueError, match="reply_context_decay"):
+        Settings(
+            database_url="postgresql://example",
+            reply_context_decay=1.1,
+        )
+
+
+def test_settings_rejects_negative_reply_context_depth_cap() -> None:
+    with pytest.raises(ValueError, match="reply_context_depth_cap"):
+        Settings(
+            database_url="postgresql://example",
+            reply_context_depth_cap=-1,
+        )

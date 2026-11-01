@@ -93,9 +93,18 @@ class ConsolidationRepository:
             return [dict(row) for row in await cursor.fetchall()]
 
     async def reply_context(self, *, user_id: str, item_ids: list[str]) -> list[dict]:
-        """Bounded ancestor closure, including archived sources. Never invent adjacency."""
+        """Ancestor closure, including archived sources. Never invent adjacency.
+
+        The closure is not capped here: callers select within their prompt
+        budget (see ``select_reply_context`` in the consolidation service),
+        so a long chain is ranked and trimmed instead of failing the whole
+        review at an arbitrary limit. Each returned item carries
+        ``reply_depth``: 1 for a direct parent, 2 for a grandparent, and so
+        on, measured as the shortest distance from any supplied item.
+        """
         seen = set(item_ids)
         frontier = item_ids
+        depth = 0
         result = []
         while frontier:
             async with self._connect() as conn:
@@ -108,11 +117,11 @@ class ConsolidationRepository:
                 )
                 parents = [dict(row) for row in await cursor.fetchall()]
             frontier = []
+            depth += 1
             for item in parents:
                 if item["id"] not in seen:
                     seen.add(item["id"])
                     frontier.append(item["id"])
+                    item["reply_depth"] = depth
                     result.append(item)
-            if len(result) > 50:
-                raise ValueError("Reply context exceeds 50 sources; review a smaller batch")
         return result
