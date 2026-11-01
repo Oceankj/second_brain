@@ -8,6 +8,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from personal_agent_memory.config.defaults import (
+    DEFAULT_REPLY_CONTEXT_DECAY,
+    DEFAULT_REPLY_CONTEXT_DEPTH_CAP,
+)
 from personal_agent_memory.contracts import CreateDailyDiaryInput
 from personal_agent_memory.services.memory.daily_diary import DailyDiaryService, utc_day_bounds
 
@@ -201,6 +205,8 @@ def make_service(
         chunk_overlap_chars=200,
         source_max_chars=24000,
         timezone="UTC",
+        reply_context_decay=DEFAULT_REPLY_CONTEXT_DECAY,
+        reply_context_depth_cap=DEFAULT_REPLY_CONTEXT_DEPTH_CAP,
     )
 
 

@@ -39,6 +39,8 @@ from personal_agent_memory.config.defaults import (
     DEFAULT_RECENT_DIARY_MAX_CHARS,
     DEFAULT_RECENT_DIARY_MAX_ITEMS,
     DEFAULT_RECENT_DIARY_MIN_SCORE,
+    DEFAULT_REPLY_CONTEXT_DECAY,
+    DEFAULT_REPLY_CONTEXT_DEPTH_CAP,
     DEFAULT_SUMMARY_PROVIDER,
     DEFAULT_SUMMARY_SOURCE_MAX_CHARS,
     DEFAULT_TAG_RETRIEVAL_MAX_TAGS,
@@ -76,6 +78,8 @@ class Settings:
     cloudflare_summary_max_tokens: int = DEFAULT_CLOUDFLARE_SUMMARY_MAX_TOKENS
     cloudflare_summary_temperature: float = DEFAULT_CLOUDFLARE_SUMMARY_TEMPERATURE
     summary_source_max_chars: int = DEFAULT_SUMMARY_SOURCE_MAX_CHARS
+    reply_context_decay: float = DEFAULT_REPLY_CONTEXT_DECAY
+    reply_context_depth_cap: int = DEFAULT_REPLY_CONTEXT_DEPTH_CAP
     daily_diary_timezone: str = DEFAULT_DAILY_DIARY_TIMEZONE
     max_chunk_chars: int = DEFAULT_MAX_CHUNK_CHARS
     chunk_overlap_chars: int = DEFAULT_CHUNK_OVERLAP_CHARS
@@ -105,6 +109,7 @@ class Settings:
         self._validate_diary()
         self._validate_chunking()
         self._validate_retrieval()
+        self._validate_consolidation()
         self._validate_mcp_http()
 
     def _validate_database(self) -> None:
@@ -186,6 +191,12 @@ class Settings:
             raise ValueError("link_expansion_source_limit cannot be negative")
         if not 0 <= self.link_expansion_source_weight <= 1:
             raise ValueError("link_expansion_source_weight must be between 0 and 1")
+
+    def _validate_consolidation(self) -> None:
+        if not 0 < self.reply_context_decay <= 1:
+            raise ValueError("reply_context_decay must be between 0 (exclusive) and 1")
+        if self.reply_context_depth_cap < 0:
+            raise ValueError("reply_context_depth_cap cannot be negative")
 
     def _validate_mcp_http(self) -> None:
         base = urlparse(self.public_base_url or self.oauth_base_url)

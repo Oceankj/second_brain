@@ -62,19 +62,18 @@ class VerbatimReviewedNote(BaseModel):
 
 # Reply-context ranking: relevance (best stored chunk cosine similarity,
 # normalized to [0, 1]) times a distance decay that plateaus, so distance
-# never drowns relevance out on a long chain. A direct parent scores 1.0, a
-# fifth-level ancestor 0.9**5, and anything deeper scores the same as the
-# fifth level: beyond that point only relevance distinguishes ancestors.
-REPLY_CONTEXT_DECAY = 0.9
-REPLY_CONTEXT_DEPTH_CAP = 5
+# never drowns relevance out on a long chain. The decay and depth cap are
+# configuration, not module constants: they live in config/defaults.py as
+# DEFAULT_REPLY_CONTEXT_*, are validated as Settings fields, and arrive here
+# via DailyDiaryService (see CandidateReviewService.review).
+def reply_context_weight(depth: int, *, decay: float, depth_cap: int) -> float:
+    return decay ** min(max(depth, 0), depth_cap)
 
 
-def reply_context_weight(depth: int) -> float:
-    return REPLY_CONTEXT_DECAY ** min(max(depth, 0), REPLY_CONTEXT_DEPTH_CAP)
-
-
-def reply_context_score(similarity: float, depth: int) -> float:
-    return (similarity + 1) / 2 * reply_context_weight(depth)
+def reply_context_score(
+    similarity: float, depth: int, *, decay: float, depth_cap: int
+) -> float:
+    return (similarity + 1) / 2 * reply_context_weight(depth, decay=decay, depth_cap=depth_cap)
 
 
 def select_reply_context(
@@ -84,13 +83,18 @@ def select_reply_context(
     related: list[dict],
     source_max_chars: int,
     similarity_by_id: dict[str, float],
+    decay: float,
+    depth_cap: int,
 ) -> tuple[list[dict], list[dict]]:
     """Rank reply context by relevance times capped distance decay, then
     fill the prompt budget in that order, keeping whole items only.
 
-    Returns ``(selected, dropped)`` with dropped in original order, so the
-    caller can record exactly what was left out. Items with no stored chunk
-    similarity score as 0 and fall back to distance order via the tie-break.
+    Returns ``(selected, dropped)``, both in the original (BFS) order, so
+    the prompt keeps conversation order and the caller can record exactly
+    what was left out. Ranking only decides inclusion, never presentation
+    order. Items with no stored chunk similarity use the raw default 0.0,
+    which normalizes to a neutral 0.5, so among them distance (then original
+    order) decides via the tie-break.
     """
     full_prompt = json.dumps(
         {
@@ -107,12 +111,16 @@ def select_reply_context(
         index, item = entry
         depth = item.get("reply_depth", index + 1)
         similarity = similarity_by_id.get(item["id"], 0.0)
-        return (-reply_context_score(similarity, depth), depth, index)
+        return (
+            -reply_context_score(similarity, depth, decay=decay, depth_cap=depth_cap),
+            depth,
+            index,
+        )
 
     ranked = [item for _, item in sorted(enumerate(reply_context), key=sort_key)]
-    selected: list[dict] = []
+    selected_ids: set[str] = set()
     for item in ranked:
-        trial = [*selected, item]
+        trial = [x for x in reply_context if x["id"] in selected_ids | {item["id"]}]
         trial_prompt = json.dumps(
             {
                 "candidates": [evidence(x) for x in candidates],
@@ -122,8 +130,8 @@ def select_reply_context(
             ensure_ascii=False,
         )
         if len(trial_prompt) <= source_max_chars:
-            selected = trial
-    selected_ids = {item["id"] for item in selected}
+            selected_ids.add(item["id"])
+    selected = [item for item in reply_context if item["id"] in selected_ids]
     dropped = [item for item in reply_context if item["id"] not in selected_ids]
     return selected, dropped
 
@@ -284,7 +292,7 @@ class CandidateReviewService:
             # it is ranked and trimmed to fit instead of blocking the review.
             # Stored chunk similarities are used, so this costs no provider
             # calls; repositories without the lookup fall back to distance
-            # order via the default similarity of 0.
+            # order, since a missing similarity normalizes to neutral.
             similarity_method = getattr(
                 repo.memory_chunks, "max_similarity_by_item", None
             )
@@ -302,6 +310,8 @@ class CandidateReviewService:
                 related=related,
                 source_max_chars=self.diary.source_max_chars,
                 similarity_by_id=similarity_by_id,
+                decay=self.diary.reply_context_decay,
+                depth_cap=self.diary.reply_context_depth_cap,
             )
             prompt = json.dumps(
                 {
@@ -334,7 +344,14 @@ class CandidateReviewService:
             # Reject all generated content and proposed links. Summary availability
             # must not block lossless promotion; embeddings and DB writes still fail closed.
             # Verbatim notes are built with their own model so an oversized
-            # candidate body is not blocked by the model-output limit.
+            # candidate body is not blocked by the model-output limit. The plan
+            # container is built with model_construct on purpose: each note is
+            # already validated as a VerbatimReviewedNote, but re-validating
+            # the container as ReviewPlan would re-impose the 24000 limit on
+            # the bodies. Downstream code never re-validates the plan; it only
+            # reads title/body/source_ids/related_ids and model_dump(), all of
+            # which VerbatimReviewedNote provides. Do not "fix" this back to
+            # ReviewPlan(...) without restoring the oversized-body failure.
             plan = ReviewPlan.model_construct(
                 notes=[
                     VerbatimReviewedNote(
@@ -444,6 +461,9 @@ class CandidateReviewService:
                 user_id=user_id,
                 plan_mode=plan_mode,
                 fallback_reason=fallback_reason,
+                dropped_reply_context_ids=[
+                    item["id"] for item in dropped_reply_context
+                ],
             )
             saved_diaries = []
             for d, chunks in zip(diaries, prepared_diaries, strict=True):
@@ -536,6 +556,7 @@ class CandidateReviewService:
         user_id: str,
         plan_mode: str,
         fallback_reason: str | None,
+        dropped_reply_context_ids: list[str] | None = None,
     ) -> list[dict]:
         repo = self.repository
         sources = {s["id"]: s for s in selected}
@@ -574,6 +595,11 @@ class CandidateReviewService:
                     "related_item_ids": note.related_ids,
                     "plan_mode": plan_mode,
                     "plan_fallback_reason": fallback_reason,
+                    # Persist the trimming audit trail, not just the preview:
+                    # without this, a later reader of the event alone cannot
+                    # tell which reply context the model never saw.
+                    "reply_context_dropped": len(dropped_reply_context_ids or []),
+                    "reply_context_dropped_ids": dropped_reply_context_ids or [],
                 },
             )
             for source_id in note.source_ids:

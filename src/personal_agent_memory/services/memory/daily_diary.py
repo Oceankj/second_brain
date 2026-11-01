@@ -37,6 +37,8 @@ class DailyDiaryService:
         chunk_overlap_chars: int,
         source_max_chars: int,
         timezone: str,
+        reply_context_decay: float,
+        reply_context_depth_cap: int,
     ) -> None:
         self.repository = repository
         self.embedding_provider = embedding_provider
@@ -45,6 +47,8 @@ class DailyDiaryService:
         self.chunk_overlap_chars = chunk_overlap_chars
         self.source_max_chars = source_max_chars
         self.timezone = timezone
+        self.reply_context_decay = reply_context_decay
+        self.reply_context_depth_cap = reply_context_depth_cap
 
     async def create_daily_diary(
         self,

@@ -305,12 +305,18 @@ async def test_invalid_plan_preserves_all_originals_without_generated_links(raw,
 
 
 def test_reply_context_weight_plateaus_at_depth_cap() -> None:
-    assert reply_context_weight(0) == 1.0
-    assert reply_context_weight(1) == 0.9
-    assert reply_context_weight(5) == 0.9**5
-    assert reply_context_weight(6) == reply_context_weight(5)
-    assert reply_context_weight(20) == reply_context_weight(5)
-    assert reply_context_score(1.0, 20) == reply_context_score(1.0, 5)
+    assert reply_context_weight(0, decay=0.9, depth_cap=5) == 1.0
+    assert reply_context_weight(1, decay=0.9, depth_cap=5) == 0.9
+    assert reply_context_weight(5, decay=0.9, depth_cap=5) == 0.9**5
+    assert reply_context_weight(6, decay=0.9, depth_cap=5) == reply_context_weight(
+        5, decay=0.9, depth_cap=5
+    )
+    assert reply_context_weight(20, decay=0.9, depth_cap=5) == reply_context_weight(
+        5, decay=0.9, depth_cap=5
+    )
+    assert reply_context_score(1.0, 20, decay=0.9, depth_cap=5) == reply_context_score(
+        1.0, 5, decay=0.9, depth_cap=5
+    )
 
 
 def _context_item(item_id: str, depth: int, body: str) -> dict:
@@ -343,6 +349,8 @@ def test_select_reply_context_ranks_relevant_far_over_irrelevant_near() -> None:
         related=[],
         source_max_chars=budget,
         similarity_by_id={"near": 0.0, "far": 1.0},
+        decay=0.9,
+        depth_cap=5,
     )
     assert [item["id"] for item in selected] == ["far"]
     assert [item["id"] for item in dropped] == ["near"]
@@ -357,9 +365,41 @@ def test_select_reply_context_keeps_all_when_within_budget() -> None:
         related=[],
         source_max_chars=24000,
         similarity_by_id={"a": 0.5, "b": 0.5},
+        decay=0.9,
+        depth_cap=5,
     )
     assert selected == context
     assert dropped == []
+
+
+def test_select_reply_context_returns_selected_in_original_order() -> None:
+    # Ranking decides inclusion, not presentation order: the prompt must
+    # keep conversation (BFS) order even when a far ancestor outranks a near one.
+    candidate = source("cand", "2026-08-29")
+    near = _context_item("near", 1, "n" * 100)
+    mid = _context_item("mid", 2, "m" * 100)
+    far = _context_item("far", 10, "f" * 100)
+    budget = len(
+        json.dumps(
+            {
+                "candidates": [evidence(candidate)],
+                "related_notes": [],
+                "reply_context": [evidence(near), evidence(far)],
+            },
+            ensure_ascii=False,
+        )
+    )
+    selected, dropped = select_reply_context(
+        [near, mid, far],
+        candidates=[candidate],
+        related=[],
+        source_max_chars=budget,
+        similarity_by_id={"near": 0.0, "mid": 0.0, "far": 1.0},
+        decay=0.9,
+        depth_cap=5,
+    )
+    assert [item["id"] for item in selected] == ["near", "far"]
+    assert [item["id"] for item in dropped] == ["mid"]
 
 
 class _FakeCursor:

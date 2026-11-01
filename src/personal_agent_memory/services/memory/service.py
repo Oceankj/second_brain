@@ -4,6 +4,10 @@ from collections.abc import Callable
 from datetime import date
 from typing import Any
 
+from personal_agent_memory.config.defaults import (
+    DEFAULT_REPLY_CONTEXT_DECAY,
+    DEFAULT_REPLY_CONTEXT_DEPTH_CAP,
+)
 from personal_agent_memory.contracts import (
     CreateDailyDiaryInput,
     GetContextInput,
@@ -53,6 +57,8 @@ class MemoryService:
         link_expansion_max_items: int,
         link_expansion_source_limit: int,
         link_expansion_source_weight: float,
+        reply_context_decay: float = DEFAULT_REPLY_CONTEXT_DECAY,
+        reply_context_depth_cap: int = DEFAULT_REPLY_CONTEXT_DEPTH_CAP,
     ) -> None:
         self.user_service = user_service
         self.ingestion = IngestionService(
@@ -84,6 +90,8 @@ class MemoryService:
             chunk_overlap_chars=chunk_overlap_chars,
             source_max_chars=summary_source_max_chars,
             timezone=daily_diary_timezone,
+            reply_context_decay=reply_context_decay,
+            reply_context_depth_cap=reply_context_depth_cap,
         )
         self.markdown = MarkdownService()
 
