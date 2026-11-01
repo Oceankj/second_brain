@@ -25,6 +25,7 @@ from personal_agent_memory.services.memory.consolidation import (
     reply_context_score,
     reply_context_weight,
     select_reply_context,
+    split_oversized_body,
     validate_plan,
 )
 
@@ -529,3 +530,90 @@ async def test_review_verbatim_fallback_preserves_oversized_body() -> None:
     assert result["plan_mode"] == "verbatim_fallback"
     assert result["plan_fallback_reason"] == "summary_unavailable"
     assert result["notes"][0]["body"] == "x" * 30000
+
+
+def test_split_oversized_body_preserves_exact_content() -> None:
+    body = ("A" * 400 + "\n\n" + "B" * 400 + "\n\n" + "C" * 400)
+    pieces = split_oversized_body(body, max_body_chars=720)
+    assert "".join(pieces) == body
+    assert len(pieces) == 3
+    assert all(len(piece) <= 720 for piece in pieces)
+    assert pieces[0] == "A" * 400 + "\n\n"
+    assert pieces[1] == "B" * 400 + "\n\n"
+    assert pieces[2] == "C" * 400
+
+
+def test_split_oversized_body_hard_cuts_without_boundaries() -> None:
+    body = "x" * 1000
+    pieces = split_oversized_body(body, max_body_chars=400)
+    assert "".join(pieces) == body
+    assert all(len(piece) <= 400 for piece in pieces)
+    assert len(pieces) == 3
+
+
+def test_split_oversized_body_returns_single_piece_when_fitting() -> None:
+    assert split_oversized_body("short", max_body_chars=400) == ["short"]
+
+
+def _oversized_candidate() -> dict:
+    candidate = source("big", "2026-08-29")
+    candidate["title"] = "Big Note"
+    candidate["body"] = "A" * 400 + "\n\n" + "B" * 400 + "\n\n" + "C" * 400
+    return candidate
+
+
+@pytest.mark.anyio
+async def test_review_splits_single_oversized_candidate_dry_run() -> None:
+    candidate = _oversized_candidate()
+    service, repo, summary, _ = setup_review([candidate])
+    service.diary.source_max_chars = 1000
+    result = await service.review(
+        ReviewCandidatesInput(token="t", dry_run=True), user_id="user-local"
+    )
+    assert result["status"] == "preview"
+    assert result["candidate_ids"] == ["big"]
+    assert result["plan_mode"] == "verbatim_fallback"
+    assert result["plan_fallback_reason"] == "oversized_candidate_split"
+    assert result["reply_context_dropped"] == 0
+    assert [n["title"] for n in result["notes"]] == [
+        "Big Note (part 1/3)",
+        "Big Note (part 2/3)",
+        "Big Note (part 3/3)",
+    ]
+    # VerbatimReviewedNote strips leading/trailing whitespace, so the "\n\n"
+    # separators at piece boundaries are stripped in the saved notes; joining
+    # the clean paragraphs with "\n\n" reconstructs the original exactly.
+    assert [n["body"] for n in result["notes"]] == ["A" * 400, "B" * 400, "C" * 400]
+    assert "\n\n".join(n["body"] for n in result["notes"]) == candidate["body"]
+    assert all(n["source_ids"] == ["big"] for n in result["notes"])
+    assert summary.summarize.await_count == 0
+    assert repo.memory_items.created == []
+
+
+@pytest.mark.anyio
+async def test_review_splits_single_oversized_candidate_accepted() -> None:
+    candidate = _oversized_candidate()
+    service, repo, summary, _ = setup_review([candidate])
+    service.diary.source_max_chars = 1000
+    result = await service.review(
+        ReviewCandidatesInput(token="t", dry_run=False), user_id="user-local"
+    )
+    assert result["status"] == "accepted"
+    assert result["plan_mode"] == "verbatim_fallback"
+    assert result["plan_fallback_reason"] == "oversized_candidate_split"
+    assert len(result["notes"]) == 3
+    assert [n["body"] for n in result["notes"]] == ["A" * 400, "B" * 400, "C" * 400]
+    assert "\n\n".join(n["body"] for n in result["notes"]) == candidate["body"]
+    assert len(result["diaries"]) == 1
+    assert repo.memory_items.archived == ["big"]
+    events = [
+        e
+        for e in repo.memory_item_events.created
+        if e["event_type"] == "created" and e["source"] == "candidate_review"
+    ]
+    assert len(events) == 3
+    assert all(e["metadata"]["plan_mode"] == "verbatim_fallback" for e in events)
+    assert all(
+        e["metadata"]["plan_fallback_reason"] == "oversized_candidate_split"
+        for e in events
+    )
