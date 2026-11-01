@@ -136,6 +136,51 @@ def select_reply_context(
     return selected, dropped
 
 
+def split_oversized_body(body: str, *, max_body_chars: int) -> list[str]:
+    """Split a body into contiguous slices, each at most ``max_body_chars``.
+
+    The slices concatenate back to exactly ``body``: no characters are added,
+    dropped, or duplicated, and cuts prefer paragraph, then newline, then
+    sentence boundaries closest to a balanced target size. A hard cut at the
+    target size is used only when no usable boundary exists in the window,
+    so a body only just over the limit does not leave a one-character tail
+    piece. A boundary closer than 50 characters to the start of a piece is
+    ignored, for the same reason.
+    """
+    if max_body_chars < 1:
+        raise ValueError("max_body_chars must be positive")
+    if len(body) <= max_body_chars:
+        return [body]
+    piece_count = (len(body) + max_body_chars - 1) // max_body_chars
+    target = (len(body) + piece_count - 1) // piece_count
+    pieces: list[str] = []
+    start = 0
+    while start < len(body):
+        remaining = len(body) - start
+        if remaining <= max_body_chars:
+            pieces.append(body[start:])
+            break
+        window_end = start + max_body_chars
+        target_end = start + target
+        cuts: list[int] = []
+        for separator in ("\n\n", "\n", ". ", "! ", "? ", ".\n", "!\n", "?\n"):
+            index = body.find(separator, start, window_end)
+            while index != -1:
+                cut = index + len(separator)
+                if cut >= start + 50 and cut < len(body):
+                    cuts.append(cut)
+                index = body.find(separator, cut, window_end)
+        if cuts:
+            cut = min(cuts, key=lambda c: (abs(c - target_end), -c))
+        else:
+            cut = target_end
+        if cut <= start or cut >= len(body):
+            cut = window_end
+        pieces.append(body[start:cut])
+        start = cut
+    return pieces
+
+
 REVIEW_PROMPT = """Organize candidate notes into durable notes. Return ONLY valid JSON:
 {"notes":[{"title":"...","body":"...","source_ids":["candidate id"],"related_ids":[]}]}
 Input is a JSON object with candidates and related_notes arrays. Empty related_notes is valid.
@@ -260,59 +305,80 @@ class CandidateReviewService:
             if len(proposal) > self.diary.source_max_chars:
                 break
             selected.append(item)
+        split_plan = None
         if not selected:
-            raise InvalidReview("Oldest candidate exceeds summary source budget; increase it")
-        reply_context = await load_reply_context(repo, selected, user_id=user_id)
-        related = await self._related(selected, user_id=user_id)
-        source_text = json.dumps([evidence(x) for x in selected], ensure_ascii=False)
-        # Keep complete related notes only; never silently truncate candidate evidence.
-        while (
-            related
-            and len(source_text)
-            + len(
+            # A single candidate that alone exceeds the budget used to block
+            # the whole queue forever: the next run picks the same oldest
+            # candidate and raises again. Split it at review time instead.
+            # Splitting here, not at ingestion, keeps the original intact
+            # until review, leaves message dedup and reply chains untouched,
+            # and covers old backlog as well as new items. Each piece is a
+            # verbatim note derived from the same source, so no content is
+            # lost or rewritten, and the original is archived once all pieces
+            # are saved. If the budget is too small for even a 100-character
+            # piece plus evidence overhead, splitting cannot help, and the
+            # original guard still applies.
+            first = candidates[0]
+            overhead = len(
                 json.dumps(
-                    [evidence(x) for x in related],
+                    evidence({**first, "body": "", "title": f"{first['title']} (part 1/1)"}),
                     ensure_ascii=False,
                 )
             )
-            > self.diary.source_max_chars
-        ):
-            related.pop()
-        prompt = json.dumps(
-            {
-                "candidates": [evidence(x) for x in selected],
-                "related_notes": [evidence(x) for x in related],
-                "reply_context": [evidence(x) for x in reply_context],
-            },
-            ensure_ascii=False,
+            max_body_chars = self.diary.source_max_chars - overhead - 100
+            if max_body_chars < 100:
+                raise InvalidReview(
+                    "Oldest candidate exceeds summary source budget; increase it"
+                )
+            pieces = split_oversized_body(first["body"], max_body_chars=max_body_chars)
+            if len(pieces) < 2:
+                raise InvalidReview(
+                    "Oldest candidate exceeds summary source budget; increase it"
+                )
+            selected = [first]
+            # VerbatimReviewedNote strips leading/trailing whitespace, so a
+            # piece ending with a paragraph separator will be saved without
+            # it. That is intentional: each piece is a clean standalone note,
+            # and the words are preserved in order; only blank lines at the
+            # cut points are lost, not content.
+            split_plan = ReviewPlan.model_construct(
+                notes=[
+                    VerbatimReviewedNote(
+                        title=f"{first['title']} (part {i + 1}/{len(pieces)})",
+                        body=piece,
+                        source_ids=[first["id"]],
+                    )
+                    for i, piece in enumerate(pieces)
+                ]
+            )
+        reply_context = (
+            await load_reply_context(repo, selected, user_id=user_id)
+            if split_plan is None
+            else []
+        )
+        related = (
+            await self._related(selected, user_id=user_id) if split_plan is None else []
         )
         dropped_reply_context: list[dict] = []
-        if len(prompt) > self.diary.source_max_chars:
-            # Reply context is read-only background, not candidate evidence, so
-            # it is ranked and trimmed to fit instead of blocking the review.
-            # Stored chunk similarities are used, so this costs no provider
-            # calls; repositories without the lookup fall back to distance
-            # order, since a missing similarity normalizes to neutral.
-            similarity_method = getattr(
-                repo.memory_chunks, "max_similarity_by_item", None
-            )
-            similarity_by_id = (
-                await similarity_method(
-                    candidate_ids=[item["id"] for item in selected],
-                    ancestor_ids=[item["id"] for item in reply_context],
+        if split_plan is not None:
+            plan = split_plan
+            plan_mode = "verbatim_fallback"
+            fallback_reason = "oversized_candidate_split"
+        else:
+            source_text = json.dumps([evidence(x) for x in selected], ensure_ascii=False)
+            # Keep complete related notes only; never silently truncate candidate evidence.
+            while (
+                related
+                and len(source_text)
+                + len(
+                    json.dumps(
+                        [evidence(x) for x in related],
+                        ensure_ascii=False,
+                    )
                 )
-                if callable(similarity_method)
-                else {}
-            )
-            reply_context, dropped_reply_context = select_reply_context(
-                reply_context,
-                candidates=selected,
-                related=related,
-                source_max_chars=self.diary.source_max_chars,
-                similarity_by_id=similarity_by_id,
-                decay=self.diary.reply_context_decay,
-                depth_cap=self.diary.reply_context_depth_cap,
-            )
+                > self.diary.source_max_chars
+            ):
+                related.pop()
             prompt = json.dumps(
                 {
                     "candidates": [evidence(x) for x in selected],
@@ -321,46 +387,81 @@ class CandidateReviewService:
                 },
                 ensure_ascii=False,
             )
-        plan_mode = "model_validated"
-        fallback_reason = None
-        if len(prompt) > self.diary.source_max_chars:
-            # Even with all reply context dropped, the candidates alone exceed
-            # the budget. No model call is needed to promote them verbatim, so
-            # fall back instead of failing the whole batch at its head.
-            fallback_reason = "source_budget_exceeded"
-        else:
-            try:
-                with usage_stage("candidate_plan"):
-                    raw = await self.diary.summary_provider_factory().summarize(
-                        system_prompt=REVIEW_PROMPT,
-                        user_prompt=prompt,
+            dropped_reply_context: list[dict] = []
+            if len(prompt) > self.diary.source_max_chars:
+                # Reply context is read-only background, not candidate evidence, so
+                # it is ranked and trimmed to fit instead of blocking the review.
+                # Stored chunk similarities are used, so this costs no provider
+                # calls; repositories without the lookup fall back to distance
+                # order, since a missing similarity normalizes to neutral.
+                similarity_method = getattr(
+                    repo.memory_chunks, "max_similarity_by_item", None
+                )
+                similarity_by_id = (
+                    await similarity_method(
+                        candidate_ids=[item["id"] for item in selected],
+                        ancestor_ids=[item["id"] for item in reply_context],
                     )
-                plan = validate_plan(raw, selected, related)
-            except InvalidReview:
-                fallback_reason = "invalid_model_plan"
-            except (RuntimeError, TimeoutError, OSError):
-                fallback_reason = "summary_unavailable"
-        if fallback_reason:
-            # Reject all generated content and proposed links. Summary availability
-            # must not block lossless promotion; embeddings and DB writes still fail closed.
-            # Verbatim notes are built with their own model so an oversized
-            # candidate body is not blocked by the model-output limit. The plan
-            # container is built with model_construct on purpose: each note is
-            # already validated as a VerbatimReviewedNote, but re-validating
-            # the container as ReviewPlan would re-impose the 24000 limit on
-            # the bodies. Downstream code never re-validates the plan; it only
-            # reads title/body/source_ids/related_ids and model_dump(), all of
-            # which VerbatimReviewedNote provides. Do not "fix" this back to
-            # ReviewPlan(...) without restoring the oversized-body failure.
-            plan = ReviewPlan.model_construct(
-                notes=[
-                    VerbatimReviewedNote(
-                        title=item["title"], body=item["body"], source_ids=[item["id"]]
-                    )
-                    for item in selected
-                ]
-            )
-            plan_mode = "verbatim_fallback"
+                    if callable(similarity_method)
+                    else {}
+                )
+                reply_context, dropped_reply_context = select_reply_context(
+                    reply_context,
+                    candidates=selected,
+                    related=related,
+                    source_max_chars=self.diary.source_max_chars,
+                    similarity_by_id=similarity_by_id,
+                    decay=self.diary.reply_context_decay,
+                    depth_cap=self.diary.reply_context_depth_cap,
+                )
+                prompt = json.dumps(
+                    {
+                        "candidates": [evidence(x) for x in selected],
+                        "related_notes": [evidence(x) for x in related],
+                        "reply_context": [evidence(x) for x in reply_context],
+                    },
+                    ensure_ascii=False,
+                )
+            plan_mode = "model_validated"
+            fallback_reason = None
+            if len(prompt) > self.diary.source_max_chars:
+                # Even with all reply context dropped, the candidates alone exceed
+                # the budget. No model call is needed to promote them verbatim, so
+                # fall back instead of failing the whole batch at its head.
+                fallback_reason = "source_budget_exceeded"
+            else:
+                try:
+                    with usage_stage("candidate_plan"):
+                        raw = await self.diary.summary_provider_factory().summarize(
+                            system_prompt=REVIEW_PROMPT,
+                            user_prompt=prompt,
+                        )
+                    plan = validate_plan(raw, selected, related)
+                except InvalidReview:
+                    fallback_reason = "invalid_model_plan"
+                except (RuntimeError, TimeoutError, OSError):
+                    fallback_reason = "summary_unavailable"
+            if fallback_reason:
+                # Reject all generated content and proposed links. Summary availability
+                # must not block lossless promotion; embeddings and DB writes still fail closed.
+                # Verbatim notes are built with their own model so an oversized
+                # candidate body is not blocked by the model-output limit. The plan
+                # container is built with model_construct on purpose: each note is
+                # already validated as a VerbatimReviewedNote, but re-validating
+                # the container as ReviewPlan would re-impose the 24000 limit on
+                # the bodies. Downstream code never re-validates the plan; it only
+                # reads title/body/source_ids/related_ids and model_dump(), all of
+                # which VerbatimReviewedNote provides. Do not "fix" this back to
+                # ReviewPlan(...) without restoring the oversized-body failure.
+                plan = ReviewPlan.model_construct(
+                    notes=[
+                        VerbatimReviewedNote(
+                            title=item["title"], body=item["body"], source_ids=[item["id"]]
+                        )
+                        for item in selected
+                    ]
+                )
+                plan_mode = "verbatim_fallback"
         days = sorted({item["source_date"] for item in selected})
         selected_ids = [item["id"] for item in selected]
         diaries = []
