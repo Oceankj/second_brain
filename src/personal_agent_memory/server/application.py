@@ -72,6 +72,8 @@ class ApplicationContext:
                 link_expansion_max_items=settings.link_expansion_max_items,
                 link_expansion_source_limit=settings.link_expansion_source_limit,
                 link_expansion_source_weight=settings.link_expansion_source_weight,
+                reply_context_decay=settings.reply_context_decay,
+                reply_context_depth_cap=settings.reply_context_depth_cap,
             )
         return self._memory_service
 

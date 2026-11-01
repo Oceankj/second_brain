@@ -42,6 +42,8 @@ from personal_agent_memory.config.defaults import (
     DEFAULT_RECENT_DIARY_MAX_CHARS,
     DEFAULT_RECENT_DIARY_MAX_ITEMS,
     DEFAULT_RECENT_DIARY_MIN_SCORE,
+    DEFAULT_REPLY_CONTEXT_DECAY,
+    DEFAULT_REPLY_CONTEXT_DEPTH_CAP,
     DEFAULT_SUMMARY_PROVIDER,
     DEFAULT_SUMMARY_SOURCE_MAX_CHARS,
     DEFAULT_TAG_RETRIEVAL_MAX_TAGS,
@@ -87,6 +89,7 @@ def load_settings() -> Settings:
         **load_daily_diary_settings(memory_config),
         **load_chunking_settings(memory_config),
         **load_retrieval_settings(memory_config),
+        **load_consolidation_settings(memory_config),
         **load_mcp_http_settings(memory_config),
     )
 
@@ -338,6 +341,23 @@ def load_retrieval_settings(memory_config: Mapping[str, Any]) -> dict[str, Any]:
             section="retrieval",
             key="link_expansion_source_weight",
             default=DEFAULT_LINK_EXPANSION_SOURCE_WEIGHT,
+        ),
+    }
+
+
+def load_consolidation_settings(memory_config: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "reply_context_decay": config_float(
+            memory_config,
+            section="consolidation",
+            key="reply_context_decay",
+            default=DEFAULT_REPLY_CONTEXT_DECAY,
+        ),
+        "reply_context_depth_cap": config_int(
+            memory_config,
+            section="consolidation",
+            key="reply_context_depth_cap",
+            default=DEFAULT_REPLY_CONTEXT_DEPTH_CAP,
         ),
     }
 
